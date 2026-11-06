@@ -57,7 +57,7 @@ export const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ onClose, onStart
 
               <div className="p-3 bg-[#171a22] border border-slate-800 rounded">
                 <span className="text-emerald-400 font-bold block mb-1">WEAPON SWITCH:</span>
-                <p className="text-slate-200">Keys 1 - 4 or Q Key</p>
+                <p className="text-slate-200">Keys 1 - 5 or Q Key</p>
                 <p className="text-slate-400 text-[11px] mt-0.5">Fists, Knife, Pistol, Shotgun, Uzi</p>
               </div>
             </div>
@@ -93,9 +93,9 @@ export const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ onClose, onStart
             </div>
             <ul className="list-disc pl-5 space-y-1.5 text-xs text-slate-300">
               <li><strong>Floating Body Parts:</strong> Independent head, torso, hands, and feet animate dynamically with breathing, walking cycles, punch thrusts, and gun recoil.</li>
-              <li><strong>Bullet Time / Slow-Mo:</strong> String together 5+ kills without taking hits to activate adrenaline slow-motion!</li>
+              <li><strong>Weapon Progression:</strong> In Story Mode, weapons start locked (starting with bare fists) and unlock into your permanent arsenal as you pick them up from fallen foes. In Normal Mode, all weapons are unlocked immediately and enemies do not drop weapons.</li>
+              <li><strong>Bullet Time / Slow-Mo:</strong> String together 3+ combo kills to activate adrenaline bullet-time slow-motion!</li>
               <li><strong>Dismemberment Gore:</strong> Vanquished foes burst into floating body parts with bloody decals that stain the Nevada concrete floor.</li>
-              <li><strong>Arsenal:</strong> Pick up dropped firearms from fallen agency grunts or switch between unlocked loadouts.</li>
             </ul>
           </div>
 

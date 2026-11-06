@@ -161,6 +161,77 @@ export interface GroundPickup {
   floatTimer: number;
 }
 
+export type GameMode = 'story' | 'arena';
+
+export interface StoryChapter {
+  id: number;
+  title: string;
+  subtitle: string;
+  location: string;
+  description: string;
+  totalGrunts: number;
+  oneByOne: boolean;
+  startingWeapon: WeaponType;
+  environment: 'field_tree' | 'desert_sun' | 'bunker' | 'club_m';
+  musicType: 'boombox' | 'combat';
+  hankOutfit: string;
+}
+
+export const STORY_CHAPTERS: StoryChapter[] = [
+  {
+    id: 1,
+    title: 'Where It All Started',
+    subtitle: 'Madness Combat 1 (2002)',
+    location: 'Nevada Grasslands · The Lone Tree & Boombox',
+    description: 'An altercation breaks out over a boombox playing music. A Grunt dances happily in the background while 30 Grunts appear one by one to take you down.',
+    totalGrunts: 30,
+    oneByOne: true,
+    startingWeapon: 'fists',
+    environment: 'field_tree',
+    musicType: 'boombox',
+    hankOutfit: 'Standard Grunt Hank',
+  },
+  {
+    id: 2,
+    title: 'Madness Redeemer',
+    subtitle: 'Madness Combat 2 (2003)',
+    location: 'The Red Sun Outpost · Nevada Desert',
+    description: "Beneath the eerie crimson sun of Nevada, hunt down the Sheriff's perimeter squad across the dust and barbed wire.",
+    totalGrunts: 35,
+    oneByOne: false,
+    startingWeapon: 'pistol',
+    environment: 'desert_sun',
+    musicType: 'combat',
+    hankOutfit: 'Head & Torso Bandages',
+  },
+  {
+    id: 3,
+    title: 'Madness Avenger',
+    subtitle: 'Madness Combat 3 (2004)',
+    location: 'A.A.H.W. Bunker Complex · Blast Core',
+    description: 'Breach the fortified underground bunker corridors. Face armed security units with shotguns and reinforced riot body armor.',
+    totalGrunts: 40,
+    oneByOne: false,
+    startingWeapon: 'shotgun',
+    environment: 'bunker',
+    musicType: 'combat',
+    hankOutfit: 'Heavy Medical Gauze Wraps',
+  },
+  {
+    id: 4,
+    title: 'Madness Depredation',
+    subtitle: 'Madness Combat 4 (2005)',
+    location: 'Club M Nightclub · Main Floor',
+    description: 'Crash through Club M under pulsating neon strobes and thunderous speakers. Neutralize all nightclub guards and elite agents.',
+    totalGrunts: 50,
+    oneByOne: false,
+    startingWeapon: 'uzi',
+    environment: 'club_m',
+    musicType: 'combat',
+    hankOutfit: 'Black Bandana, Red Goggles & Ninja Outfit',
+  },
+];
+
 export interface GameStats {
   score: number;
   kills: number;
@@ -170,12 +241,18 @@ export interface GameStats {
   comboStreak: number;
   maxCombo: number;
   timeAlive: number;
+  storyProgress?: {
+    chapterId: number;
+    gruntsKilled: number;
+    gruntsTotal: number;
+  };
 }
 
 export type GameView = 
   | 'INTRO_NEURON' 
   | 'INTRO_TITLE' 
-  | 'HOW_TO_PLAY' 
+  | 'CHAPTER_SELECT'
   | 'PLAYING' 
+  | 'CHAPTER_VICTORY'
   | 'PAUSED' 
   | 'GAME_OVER';

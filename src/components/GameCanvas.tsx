@@ -12,14 +12,19 @@ import {
   WeaponType,
   Weapon,
   GoreSetting,
-  BloodAmount
+  BloodAmount,
+  GameMode,
+  STORY_CHAPTERS
 } from '../types/game';
 import { createWeaponInstance } from '../utils/weapons';
 import { drawGrunt, drawRagdollPiece, spriteManager } from '../utils/sprites';
+import { drawChapterEnvironment } from '../utils/environments';
 import { soundManager } from '../audio/soundManager';
 import { inputController } from '../utils/inputController';
 
 interface GameCanvasProps {
+  gameMode: GameMode;
+  currentChapterId: number;
   gameSessionId: number;
   stats: GameStats;
   onUpdateStats: (updater: (prev: GameStats) => GameStats) => void;
@@ -27,16 +32,21 @@ interface GameCanvasProps {
   onPlayerHealthUpdate: (current: number, max: number) => void;
   currentWeaponType: WeaponType;
   onWeaponChange: (weapon: Weapon) => void;
+  unlockedWeapons: WeaponType[];
+  onUnlockWeapon: (type: WeaponType) => void;
   slowMoActive: boolean;
   onToggleSlowMo: () => void;
   isPaused: boolean;
   goreSetting: GoreSetting;
   bloodAmount: BloodAmount;
+  onChapterComplete: () => void;
 }
 
 const PLAYER_MAX_HEALTH = 250; // Protagonist has 250 HP so they can survive high-action combat
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
+  gameMode,
+  currentChapterId,
   gameSessionId,
   stats,
   onUpdateStats,
@@ -44,11 +54,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onPlayerHealthUpdate,
   currentWeaponType,
   onWeaponChange,
+  unlockedWeapons,
+  onUnlockWeapon,
   slowMoActive,
   onToggleSlowMo,
   isPaused,
   goreSetting,
   bloodAmount,
+  onChapterComplete,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -91,6 +104,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const pickupsRef = useRef<GroundPickup[]>([]);
   const floorCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Story Mode Tracking
+  const storyKillsRef = useRef<number>(0);
+  const storySpawnedRef = useRef<number>(0);
+  const chapterCompletedRef = useRef<boolean>(false);
+
   // Input & Visual State
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 500, y: 300 });
@@ -102,6 +120,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const waveSpawningRef = useRef<boolean>(false);
   const lastAttackTimeRef = useRef<number>(0);
 
+  // Floating text
+  const addFloatingText = (text: string, x: number, y: number, color: string = '#f87171', fontSize: number = 16) => {
+    floatingTextsRef.current.push({
+      id: Math.random().toString(),
+      text,
+      x,
+      y,
+      color,
+      fontSize,
+      alpha: 1,
+      vy: -1.8,
+    });
+  };
+
   // Sync weapon
   useEffect(() => {
     if (playerRef.current && playerRef.current.weapon.type !== currentWeaponType) {
@@ -109,17 +141,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   }, [currentWeaponType]);
 
-  // RESET GAME WHEN gameSessionId CHANGES (Fixes restart button!)
+  // RESET GAME WHEN gameSessionId, chapter, or gameMode CHANGES
   useEffect(() => {
     const canvas = canvasRef.current;
-    const centerX = canvas ? canvas.width / 2 : 400;
-    const centerY = canvas ? canvas.height / 2 : 300;
+    const canvasWidth = canvas ? canvas.width : 1000;
+    const canvasHeight = canvas ? canvas.height : 600;
+    const centerX = canvasWidth / 2;
+    const hasSky = gameMode === 'story' && (currentChapterId === 1 || currentChapterId === 2);
+    const startY = hasSky ? Math.round(canvasHeight * 0.65) : canvasHeight / 2;
+
+    const chapter = STORY_CHAPTERS.find((c) => c.id === currentChapterId) || STORY_CHAPTERS[0];
+    const initialWeaponType = gameMode === 'story' ? chapter.startingWeapon : currentWeaponType;
 
     // Reset player completely
     playerRef.current = {
       id: 'player',
       x: centerX,
-      y: centerY,
+      y: startY,
       vx: 0,
       vy: 0,
       radius: 20,
@@ -138,7 +176,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       isDodging: false,
       dodgeTimer: 0,
       isDead: false,
-      weapon: createWeaponInstance(currentWeaponType),
+      weapon: createWeaponInstance(initialWeaponType),
       recoilOffset: 0,
       muzzleFlashTimer: 0,
       bloodStains: [],
@@ -158,6 +196,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     waveSpawningRef.current = false;
     screenShakeRef.current = 0;
 
+    storyKillsRef.current = 0;
+    storySpawnedRef.current = 0;
+    chapterCompletedRef.current = false;
+
     // Clear floor blood canvas
     if (floorCanvasRef.current) {
       const fctx = floorCanvasRef.current.getContext('2d');
@@ -168,15 +210,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     inputController.resetAll();
 
-    // Spawn initial wave after short buffer
+    // Spawn initial enemies after short buffer
     const spawnTimer = setTimeout(() => {
       if (canvas) {
-        spawnEnemyWave(1, canvas.width, canvas.height);
+        if (gameMode === 'story') {
+          addFloatingText(`CHAPTER ${chapter.id}: ${chapter.title.toUpperCase()}`, canvas.width / 2, 75, '#ef4444', 26);
+          if (chapter.id === 1) {
+            addFloatingText('OBJECTIVE: DEFEAT ALL 30 GRUNTS', canvas.width / 2, 108, '#fbbf24', 16);
+          }
+          onUpdateStats((prev) => ({
+            ...prev,
+            storyProgress: {
+              chapterId: currentChapterId,
+              gruntsKilled: 0,
+              gruntsTotal: chapter.totalGrunts,
+            },
+          }));
+          spawnNextStoryEnemy(canvas.width, canvas.height);
+        } else {
+          spawnEnemyWave(1, canvas.width, canvas.height);
+        }
       }
     }, 400);
 
     return () => clearTimeout(spawnTimer);
-  }, [gameSessionId]);
+  }, [gameSessionId, currentChapterId, gameMode]);
 
   // Clear floor canvas if goreSetting changed to no_blood
   useEffect(() => {
@@ -354,19 +412,226 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   }, [goreSetting]);
 
-  // Floating text
-  const addFloatingText = (text: string, x: number, y: number, color: string = '#f87171', fontSize: number = 16) => {
-    floatingTextsRef.current.push({
-      id: Math.random().toString(),
-      text,
-      x,
-      y,
-      color,
-      fontSize,
-      alpha: 1,
-      vy: -1.8,
+  // Handle enemy defeat (used by bullets, punches, and slashes)
+  const handleEnemyDefeated = useCallback((enemy: Character, enemyIndex: number) => {
+    spawnDismemberment(enemy);
+    addFloatingText('+100', enemy.x, enemy.y - 45, '#fbbf24', 20);
+
+    // Hank Wimbleton kill heal: reward player with +8 HP on kill!
+    const player = playerRef.current;
+    if (player.health < player.maxHealth && !player.isDead) {
+      player.health = Math.min(player.maxHealth, player.health + 8);
+    }
+
+    const canvas = canvasRef.current;
+    const canvasHeight = canvas ? canvas.height : 600;
+    const hasSky = gameMode === 'story' && (currentChapterId === 1 || currentChapterId === 2);
+    const minGroundY = hasSky 
+      ? (currentChapterId === 1 ? Math.round(canvasHeight * 0.445) : Math.round(canvasHeight * 0.425)) 
+      : 28;
+    const dropY = Math.max(minGroundY + 12, enemy.y);
+
+    // Pickups: medkit or ammo
+    if (Math.random() < 0.45) {
+      pickupsRef.current.push({
+        id: Math.random().toString(),
+        type: Math.random() < 0.35 ? 'medkit' : 'ammo',
+        x: enemy.x,
+        y: dropY,
+        healthAmount: 40,
+        ammoAmount: 24,
+        floatTimer: 0,
+      });
+    }
+
+    // Dropped weapon pickup — strictly ONLY drops in Story Mode! (In normal mode, weapons never drop from enemies)
+    if (gameMode === 'story' && enemy.weapon.type !== 'fists') {
+      pickupsRef.current.push({
+        id: Math.random().toString(),
+        type: 'weapon',
+        weaponType: enemy.weapon.type,
+        x: enemy.x + (Math.random() - 0.5) * 16,
+        y: dropY,
+        floatTimer: 0,
+      });
+    }
+
+    if (gameMode === 'story') {
+      storyKillsRef.current++;
+      const chapter = STORY_CHAPTERS.find((c) => c.id === currentChapterId) || STORY_CHAPTERS[0];
+      const killsSoFar = storyKillsRef.current;
+      
+      onUpdateStats((prev) => {
+        const newCombo = prev.comboStreak + 1;
+        return {
+          ...prev,
+          kills: prev.kills + 1,
+          score: prev.score + 100 * newCombo,
+          comboStreak: newCombo,
+          maxCombo: Math.max(prev.maxCombo, newCombo),
+          storyProgress: {
+            chapterId: currentChapterId,
+            gruntsKilled: killsSoFar,
+            gruntsTotal: chapter.totalGrunts,
+          },
+        };
+      });
+
+      if (killsSoFar >= chapter.totalGrunts && !chapterCompletedRef.current) {
+        chapterCompletedRef.current = true;
+        soundManager.playIntroHit();
+        addFloatingText('CHAPTER COMPLETE!', canvasRef.current ? canvasRef.current.width / 2 : 400, 90, '#10b981', 32);
+        setTimeout(() => {
+          onChapterComplete();
+        }, 1400);
+      }
+    } else {
+      onUpdateStats((prev) => {
+        const newCombo = prev.comboStreak + 1;
+        return {
+          ...prev,
+          kills: prev.kills + 1,
+          score: prev.score + 100 * newCombo,
+          comboStreak: newCombo,
+          maxCombo: Math.max(prev.maxCombo, newCombo),
+        };
+      });
+    }
+
+    enemiesRef.current.splice(enemyIndex, 1);
+  }, [currentChapterId, gameMode, onChapterComplete, onUpdateStats, spawnDismemberment]);
+
+  // Spawn Next Story Grunt (Sequential for Chapter 1: 30 grunts one by one!)
+  const spawnNextStoryEnemy = useCallback((canvasWidth: number, canvasHeight: number) => {
+    const chapter = STORY_CHAPTERS.find((c) => c.id === currentChapterId) || STORY_CHAPTERS[0];
+    if (storySpawnedRef.current >= chapter.totalGrunts) return;
+
+    storySpawnedRef.current++;
+    const gruntNumber = storySpawnedRef.current;
+
+    // Primarily spawn from left or right edge, strictly on the ground (never in the sky!)
+    const hasSky = currentChapterId === 1 || currentChapterId === 2;
+    const minGroundY = hasSky 
+      ? (currentChapterId === 1 ? Math.round(canvasHeight * 0.445) : Math.round(canvasHeight * 0.425)) 
+      : 50;
+
+    let spawnX = 0;
+    let spawnY = 0;
+    const edge = Math.random() < 0.5 ? 2 : 3;
+    if (edge === 2) {
+      spawnX = -40;
+      spawnY = minGroundY + 15 + Math.random() * (canvasHeight - minGroundY - 45);
+    } else {
+      spawnX = canvasWidth + 40;
+      spawnY = minGroundY + 15 + Math.random() * (canvasHeight - minGroundY - 45);
+    }
+
+    let eType: 'grunt' | 'knife_grunt' | 'pistol_grunt' | 'shotgun_grunt' | 'agent' = 'grunt';
+    let eWeapon: WeaponType = 'fists';
+    let eHealth = 40;
+
+    if (currentChapterId === 1) {
+      // 30 GRUNTS ONE BY ONE!
+      if (gruntNumber <= 6) {
+        eType = 'grunt';
+        eWeapon = 'fists';
+        eHealth = 40;
+      } else if (gruntNumber <= 13) {
+        eType = 'knife_grunt';
+        eWeapon = 'knife';
+        eHealth = 45;
+      } else if (gruntNumber <= 22) {
+        eType = 'pistol_grunt';
+        eWeapon = 'pistol';
+        eHealth = 50;
+      } else if (gruntNumber <= 28) {
+        eType = 'shotgun_grunt';
+        eWeapon = 'shotgun';
+        eHealth = 60;
+      } else {
+        eType = 'agent';
+        eWeapon = 'uzi';
+        eHealth = 80;
+      }
+
+      addFloatingText(`GRUNT [${gruntNumber}/30] INCOMING!`, canvasWidth / 2, 70, '#f87171', 18);
+    } else if (currentChapterId === 2) {
+      const rand = Math.random();
+      if (rand < 0.4) {
+        eType = 'pistol_grunt';
+        eWeapon = 'pistol';
+        eHealth = 45;
+      } else if (rand < 0.7) {
+        eType = 'shotgun_grunt';
+        eWeapon = 'shotgun';
+        eHealth = 55;
+      } else {
+        eType = 'knife_grunt';
+        eWeapon = 'knife';
+        eHealth = 40;
+      }
+    } else if (currentChapterId === 3) {
+      const rand = Math.random();
+      if (rand < 0.5) {
+        eType = 'shotgun_grunt';
+        eWeapon = 'shotgun';
+        eHealth = 65;
+      } else {
+        eType = 'agent';
+        eWeapon = 'uzi';
+        eHealth = 80;
+      }
+    } else {
+      const rand = Math.random();
+      if (rand < 0.4) {
+        eType = 'agent';
+        eWeapon = 'uzi';
+        eHealth = 85;
+      } else if (rand < 0.7) {
+        eType = 'shotgun_grunt';
+        eWeapon = 'shotgun';
+        eHealth = 65;
+      } else {
+        eType = 'pistol_grunt';
+        eWeapon = 'pistol';
+        eHealth = 55;
+      }
+    }
+
+    enemiesRef.current.push({
+      id: `story-enemy-${Date.now()}-${gruntNumber}`,
+      x: spawnX,
+      y: spawnY,
+      vx: 0,
+      vy: 0,
+      radius: 20,
+      angle: 0,
+      facingDirection: 1,
+      health: eHealth,
+      maxHealth: eHealth,
+      isPlayer: false,
+      enemyType: eType,
+      walkTimer: 0,
+      isMoving: false,
+      attackTimer: 0,
+      isAttacking: false,
+      attackProgress: 0,
+      attackHand: 'right',
+      hurtTimer: 0,
+      isDodging: false,
+      dodgeTimer: 0,
+      isDead: false,
+      weapon: createWeaponInstance(eWeapon),
+      recoilOffset: 0,
+      muzzleFlashTimer: 0,
+      bloodStains: [],
+      goreHeadSprite: undefined,
+      hasRibWound: false,
+      hasStabWound: false,
+      aiState: 'chase',
+      aiTimer: Math.random() * 2,
     });
-  };
+  }, [currentChapterId]);
 
   // Perform Attack
   const executeAttack = useCallback((type: 'primary' | 'melee') => {
@@ -406,7 +671,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       screenShakeRef.current = Math.max(screenShakeRef.current, 3);
 
       const punchRange = 65;
-      enemiesRef.current.forEach((enemy) => {
+      for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
+        const enemy = enemiesRef.current[i];
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -429,15 +695,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               shotsHit: prev.shotsHit + 1,
               score: prev.score + 25,
             }));
+
+            if (enemy.health <= 0) {
+              handleEnemyDefeated(enemy, i);
+            }
           }
         }
-      });
+      }
     } else if (weapon.type === 'knife') {
       soundManager.playSlash();
       screenShakeRef.current = Math.max(screenShakeRef.current, 4);
 
       const slashRange = 75;
-      enemiesRef.current.forEach((enemy) => {
+      for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
+        const enemy = enemiesRef.current[i];
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -457,8 +728,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             shotsHit: prev.shotsHit + 1,
             score: prev.score + 50,
           }));
+
+          if (enemy.health <= 0) {
+            handleEnemyDefeated(enemy, i);
+          }
         }
-      });
+      }
     } else {
       // Firearms
       if (weapon.type === 'pistol') soundManager.playPistol();
@@ -498,7 +773,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
     }
-  }, [addBloodSplatter, addBloodToCharacter, onUpdateStats, onWeaponChange]);
+  }, [addBloodSplatter, addBloodToCharacter, handleEnemyDefeated, onUpdateStats, onWeaponChange]);
 
   // Execute Dodge
   const executeDodge = useCallback(() => {
@@ -609,16 +884,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         executeDodge();
       }
 
-      if (e.key === '1') onWeaponChange(createWeaponInstance('fists'));
-      if (e.key === '2') onWeaponChange(createWeaponInstance('knife'));
-      if (e.key === '3') onWeaponChange(createWeaponInstance('pistol'));
-      if (e.key === '4') onWeaponChange(createWeaponInstance('shotgun'));
-      if (e.key === '5') onWeaponChange(createWeaponInstance('uzi'));
+      const trySwitchWeapon = (type: WeaponType) => {
+        if (gameMode === 'story' && !unlockedWeapons.includes(type)) {
+          addFloatingText('LOCKED! PICK UP IN BATTLE', playerRef.current.x, playerRef.current.y - 35, '#ef4444', 14);
+          soundManager.playDryFire();
+          return;
+        }
+        onWeaponChange(createWeaponInstance(type));
+        soundManager.playPistol();
+      };
+
+      if (e.key === '1') trySwitchWeapon('fists');
+      if (e.key === '2') trySwitchWeapon('knife');
+      if (e.key === '3') trySwitchWeapon('pistol');
+      if (e.key === '4') trySwitchWeapon('shotgun');
+      if (e.key === '5') trySwitchWeapon('uzi');
       if (e.key.toLowerCase() === 'q') {
-        const types: WeaponType[] = ['fists', 'knife', 'pistol', 'shotgun', 'uzi'];
-        const idx = types.indexOf(playerRef.current.weapon.type);
-        const next = types[(idx + 1) % types.length];
-        onWeaponChange(createWeaponInstance(next));
+        const available: WeaponType[] = gameMode === 'story' ? unlockedWeapons : ['fists', 'knife', 'pistol', 'shotgun', 'uzi'];
+        if (available.length > 1) {
+          const idx = available.indexOf(playerRef.current.weapon.type);
+          const next = available[(idx + 1) % available.length];
+          onWeaponChange(createWeaponInstance(next));
+          soundManager.playPistol();
+        }
       }
     };
 
@@ -634,7 +922,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [onWeaponChange, executeDodge]);
+  }, [onWeaponChange, executeDodge, gameMode, unlockedWeapons]);
 
   // Mouse Listeners
   useEffect(() => {
@@ -769,8 +1057,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         player.y += player.vy * dt;
 
         const padding = 28;
+        const hasSky = gameMode === 'story' && (currentChapterId === 1 || currentChapterId === 2);
+        const minGroundY = hasSky 
+          ? (currentChapterId === 1 ? Math.round(height * 0.445) : Math.round(height * 0.425)) 
+          : padding;
+
         player.x = Math.max(padding, Math.min(width - padding, player.x));
-        player.y = Math.max(padding, Math.min(height - padding, player.y));
+        player.y = Math.max(minGroundY, Math.min(height - padding, player.y));
 
         player.isMoving = inputLen > 0.1;
         if (player.isMoving) {
@@ -833,17 +1126,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onPlayerHealthUpdate(player.health, player.maxHealth);
       }
 
-      // 3. SPAWN WAVES
+      // 3. SPAWN ENEMIES (Story sequential vs Arena wave)
       if (enemiesRef.current.length === 0 && !waveSpawningRef.current && !player.isDead) {
-        waveSpawningRef.current = true;
-        setTimeout(() => {
-          onUpdateStats((prev) => {
-            const nextWave = prev.wave + 1;
-            spawnEnemyWave(nextWave, width, height);
-            return { ...prev, wave: nextWave };
-          });
-          waveSpawningRef.current = false;
-        }, 1200);
+        if (gameMode === 'story') {
+          const chapter = STORY_CHAPTERS.find((c) => c.id === currentChapterId) || STORY_CHAPTERS[0];
+          if (storySpawnedRef.current < chapter.totalGrunts) {
+            waveSpawningRef.current = true;
+            setTimeout(() => {
+              if (!player.isDead && canvasRef.current) {
+                if (chapter.oneByOne) {
+                  // Exactly one by one for Chapter 1!
+                  spawnNextStoryEnemy(width, height);
+                } else {
+                  // Squad of up to 3
+                  const toSpawn = Math.min(3, chapter.totalGrunts - storySpawnedRef.current);
+                  for (let s = 0; s < toSpawn; s++) {
+                    spawnNextStoryEnemy(width, height);
+                  }
+                }
+              }
+              waveSpawningRef.current = false;
+            }, chapter.oneByOne ? 400 : 750);
+          }
+        } else {
+          waveSpawningRef.current = true;
+          setTimeout(() => {
+            onUpdateStats((prev) => {
+              const nextWave = prev.wave + 1;
+              spawnEnemyWave(nextWave, width, height);
+              return { ...prev, wave: nextWave };
+            });
+            waveSpawningRef.current = false;
+          }, 1200);
+        }
       }
 
       // 4. UPDATE ENEMIES
@@ -872,6 +1187,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         enemy.x += enemy.vx * effectiveDt;
         enemy.y += enemy.vy * effectiveDt;
+
+        const hasSky = gameMode === 'story' && (currentChapterId === 1 || currentChapterId === 2);
+        const minGroundY = hasSky 
+          ? (currentChapterId === 1 ? Math.round(height * 0.445) : Math.round(height * 0.425)) 
+          : 28;
+        enemy.x = Math.max(28, Math.min(width - 28, enemy.x));
+        enemy.y = Math.max(minGroundY, Math.min(height - 28, enemy.y));
 
         enemy.attackTimer -= effectiveDt;
         if (enemy.attackTimer <= 0 && !player.isDead && !player.isDodging) {
@@ -972,38 +1294,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }));
 
               if (enemy.health <= 0) {
-                spawnDismemberment(enemy);
-                addFloatingText('+100', enemy.x, enemy.y - 45, '#fbbf24', 20);
-
-                // Hank Wimbleton kill heal: reward player with +8 HP on kill!
-                if (player.health < player.maxHealth && !player.isDead) {
-                  player.health = Math.min(player.maxHealth, player.health + 8);
-                }
-
-                if (Math.random() < 0.45) {
-                  pickupsRef.current.push({
-                    id: Math.random().toString(),
-                    type: Math.random() < 0.35 ? 'medkit' : 'ammo',
-                    x: enemy.x,
-                    y: enemy.y,
-                    healthAmount: 40,
-                    ammoAmount: 24,
-                    floatTimer: 0,
-                  });
-                }
-
-                onUpdateStats((prev) => {
-                  const newCombo = prev.comboStreak + 1;
-                  return {
-                    ...prev,
-                    kills: prev.kills + 1,
-                    score: prev.score + 100 * newCombo,
-                    comboStreak: newCombo,
-                    maxCombo: Math.max(prev.maxCombo, newCombo),
-                  };
-                });
-
-                enemiesRef.current.splice(j, 1);
+                handleEnemyDefeated(enemy, j);
               }
               break;
             }
@@ -1115,7 +1406,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < 32 && !player.isDead) {
-          if (p.type === 'medkit' && player.health < player.maxHealth) {
+          if (p.type === 'weapon' && p.weaponType) {
+            const newWep = createWeaponInstance(p.weaponType);
+            player.weapon = newWep;
+            onWeaponChange(newWep);
+            
+            if (gameMode === 'story' && !unlockedWeapons.includes(p.weaponType)) {
+              onUnlockWeapon(p.weaponType);
+              addFloatingText(`★ UNLOCKED ${newWep.name.toUpperCase()}! ★`, player.x, player.y - 45, '#10b981', 22);
+              soundManager.playIntroHit();
+            } else {
+              addFloatingText(`EQUIPPED ${newWep.name.toUpperCase()}!`, player.x, player.y - 30, '#38bdf8', 18);
+              soundManager.playPistol();
+            }
+            pickupsRef.current.splice(i, 1);
+            continue;
+          } else if (p.type === 'medkit' && player.health < player.maxHealth) {
             player.health = Math.min(player.maxHealth, player.health + (p.healthAmount || 40));
             addFloatingText(`+${p.healthAmount || 40} HP`, player.x, player.y - 30, '#10b981', 18);
             pickupsRef.current.splice(i, 1);
@@ -1155,59 +1461,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(shakeX, shakeY);
       }
 
-      // Background
-      ctx.fillStyle = '#14161b';
-      ctx.fillRect(0, 0, width, height);
-
-      // Grid
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      ctx.lineWidth = 1;
-      const gridSize = 60;
-      for (let x = 0; x < width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      }
-
-      // Border
-      ctx.strokeStyle = '#272a34';
-      ctx.lineWidth = 12;
-      ctx.strokeRect(6, 6, width - 12, height - 12);
-
-      // Hazard Corners
-      const cornerSize = 40;
-      ctx.fillStyle = '#d97706';
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(cornerSize, 0);
-      ctx.lineTo(0, cornerSize);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(width, 0);
-      ctx.lineTo(width - cornerSize, 0);
-      ctx.lineTo(width, cornerSize);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(0, height);
-      ctx.lineTo(cornerSize, height);
-      ctx.lineTo(0, height - cornerSize);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(width, height);
-      ctx.lineTo(width - cornerSize, height);
-      ctx.lineTo(width, height - cornerSize);
-      ctx.closePath();
-      ctx.fill();
+      // Draw Environment (Story Chapter 1 Field/Tree/Boombox/Dancing Grunt, Chapters 2-4, or Arena Grid)
+      drawChapterEnvironment(ctx, width, height, currentTime / 1000, gameMode, currentChapterId);
 
       // Persistent Floor Blood Decals (Blitted in 1 ultra-fast GPU call!)
       if (goreSetting !== 'no_blood' && floorCanvasRef.current) {
@@ -1238,7 +1493,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.save();
         ctx.translate(p.x, p.y + floatY);
 
-        if (p.type === 'medkit') {
+        if (p.type === 'weapon') {
+          ctx.fillStyle = '#0f172a';
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.fillRect(-14, -8, 28, 16);
+          ctx.strokeRect(-14, -8, 28, 16);
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = 'bold 8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(p.weaponType ? p.weaponType.toUpperCase() : 'GUN', 0, 3);
+        } else if (p.type === 'medkit') {
           ctx.fillStyle = '#065f46';
           ctx.strokeStyle = '#34d399';
           ctx.lineWidth = 2;
@@ -1289,7 +1554,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       allCharacters.sort((a, b) => a.y - b.y);
 
       allCharacters.forEach((char) => {
-        drawGrunt(ctx, char, currentTime / 1000, goreSetting);
+        drawGrunt(ctx, char, currentTime / 1000, goreSetting, gameMode === 'story' ? currentChapterId : 0);
       });
 
       // Bullets

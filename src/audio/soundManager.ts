@@ -247,6 +247,28 @@ class SoundManager {
     osc.stop(t + 0.12);
   }
 
+  // Dry fire / mechanical locked weapon click
+  public playDryFire() {
+    if (!this.sfxEnabled) return;
+    this.initContext();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1200, t);
+    osc.frequency.exponentialRampToValueAtTime(320, t + 0.04);
+
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.04);
+  }
+
   // 8. Blood Squish / Gore Splat
   public playBloodSplat() {
     if (!this.sfxEnabled) return;
@@ -328,10 +350,14 @@ class SoundManager {
     noise.start(t);
   }
 
+  private currentTrack: 'combat' | 'boombox' | null = null;
+
   // 10. Background Industrial Techno Combat Beat (Cheshyre / Madness Combat style!)
   public startCombatMusic() {
-    if (this.isMusicPlaying) return;
+    if (this.isMusicPlaying && this.currentTrack === 'combat') return;
+    this.stopMusic();
     this.isMusicPlaying = true;
+    this.currentTrack = 'combat';
     this.initContext();
 
     const bpm = 135;
@@ -408,12 +434,127 @@ class SoundManager {
     }, stepDurationMs);
   }
 
+  // 11. Upbeat Retro Boombox Dance Melody (For Chapter 1: Where It All Started)
+  public startBoomboxMusic() {
+    if (this.isMusicPlaying && this.currentTrack === 'boombox') return;
+    this.stopMusic();
+    this.isMusicPlaying = true;
+    this.currentTrack = 'boombox';
+    this.initContext();
+
+    const bpm = 126;
+    const stepDurationMs = (60 / bpm / 4) * 1000; // 16th notes
+
+    // Funky bouncy bassline (A minor / C major dance groove)
+    const boomboxBass = [
+      110.00, 0, 110.00, 130.81, 
+      0, 146.83, 0, 164.81, 
+      110.00, 0, 110.00, 98.00, 
+      0, 110.00, 130.81, 0
+    ];
+
+    // Cheerful arpeggiated dance lead melody
+    const boomboxLead = [
+      440.00, 0, 523.25, 0, 
+      659.25, 587.33, 523.25, 0, 
+      440.00, 523.25, 659.25, 0, 
+      587.33, 0, 523.25, 392.00
+    ];
+
+    this.musicStep = 0;
+    this.musicInterval = window.setInterval(() => {
+      if (!this.musicEnabled || !this.ctx || this.ctx.state !== 'running') {
+        return;
+      }
+
+      const t = this.ctx.currentTime;
+      const step = this.musicStep % 16;
+      this.musicStep++;
+
+      // Punchy Disco Kick
+      if (step % 4 === 0) {
+        const kickOsc = this.ctx.createOscillator();
+        const kickGain = this.ctx.createGain();
+        kickOsc.type = 'sine';
+        kickOsc.frequency.setValueAtTime(150, t);
+        kickOsc.frequency.exponentialRampToValueAtTime(45, t + 0.1);
+        kickGain.gain.setValueAtTime(0.32, t);
+        kickGain.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+        kickOsc.connect(kickGain);
+        kickGain.connect(this.ctx.destination);
+        kickOsc.start(t);
+        kickOsc.stop(t + 0.13);
+      }
+
+      // Crisp Disco Snare
+      if (step === 4 || step === 12) {
+        this.playNoise(0.09, 0.18, 2400, 'bandpass');
+      }
+
+      // Funky hi-hat groove
+      if (step % 2 === 1 || step % 4 === 2) {
+        this.playNoise(0.03, 0.07, 8500, 'highpass');
+      }
+
+      // Bouncy bass note
+      const bassFreq = boomboxBass[step];
+      if (bassFreq > 0) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(bassFreq, t);
+
+        gain.gain.setValueAtTime(0.25, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.13);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.14);
+      }
+
+      // Cheerful synth lead (Every 2 steps or syncopated)
+      const leadFreq = boomboxLead[step];
+      if (leadFreq > 0) {
+        const leadOsc = this.ctx.createOscillator();
+        const leadGain = this.ctx.createGain();
+        const leadFilter = this.ctx.createBiquadFilter();
+
+        leadOsc.type = 'square';
+        leadOsc.frequency.setValueAtTime(leadFreq, t);
+
+        leadFilter.type = 'lowpass';
+        leadFilter.frequency.setValueAtTime(1600, t);
+        leadFilter.Q.value = 2;
+
+        leadGain.gain.setValueAtTime(0.12, t);
+        leadGain.gain.exponentialRampToValueAtTime(0.005, t + 0.14);
+
+        leadOsc.connect(leadFilter);
+        leadFilter.connect(leadGain);
+        leadGain.connect(this.ctx.destination);
+
+        leadOsc.start(t);
+        leadOsc.stop(t + 0.15);
+      }
+    }, stepDurationMs);
+  }
+
   public stopCombatMusic() {
+    this.stopMusic();
+  }
+
+  public stopBoomboxMusic() {
+    this.stopMusic();
+  }
+
+  public stopMusic() {
     if (this.musicInterval) {
       clearInterval(this.musicInterval);
       this.musicInterval = null;
     }
     this.isMusicPlaying = false;
+    this.currentTrack = null;
   }
 }
 

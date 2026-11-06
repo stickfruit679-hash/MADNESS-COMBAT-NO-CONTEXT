@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Play, HelpCircle, Volume2, VolumeX, ShieldAlert, Crosshair, Skull, ShieldCheck, Flame, Droplet, AlertTriangle } from 'lucide-react';
+import { Play, HelpCircle, Volume2, VolumeX, ShieldAlert, Crosshair, Skull, ShieldCheck, Flame, Droplet, AlertTriangle, Radio } from 'lucide-react';
 import { soundManager } from '../audio/soundManager';
 import { GoreSetting, BloodAmount } from '../types/game';
 
 interface IntroScreenProps {
-  onStartGame: () => void;
+  onStartStory: (chapterId?: number) => void;
+  onStartArena: () => void;
+  onOpenChapterSelect: () => void;
   onOpenHowToPlay: () => void;
   goreSetting: GoreSetting;
   onSelectGoreSetting: (setting: GoreSetting) => void;
@@ -13,7 +15,9 @@ interface IntroScreenProps {
 }
 
 export const IntroScreen: React.FC<IntroScreenProps> = ({ 
-  onStartGame, 
+  onStartStory,
+  onStartArena,
+  onOpenChapterSelect,
   onOpenHowToPlay,
   goreSetting,
   onSelectGoreSetting,
@@ -49,11 +53,11 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({
     setPhase('TITLE');
   };
 
-  const handleStart = () => {
+  const handleStartStoryDefault = () => {
     soundManager.unlock();
     soundManager.playPistol();
-    soundManager.startCombatMusic();
-    onStartGame();
+    soundManager.startBoomboxMusic();
+    onStartStory(1);
   };
 
   const toggleSound = () => {
@@ -194,21 +198,56 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({
           </div>
 
           {/* Action Menu Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md mt-2">
+          <div className="flex flex-col gap-2.5 w-full max-w-md mt-2">
+            {/* Primary: STORY MODE (Where It All Started) */}
             <button
-              onClick={handleStart}
-              className="w-full sm:w-auto flex-1 flex items-center justify-center gap-3 px-8 py-3.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-heading text-xl sm:text-2xl font-bold uppercase tracking-wider rounded-md shadow-[0_0_25px_rgba(220,38,38,0.5)] transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              onClick={() => {
+                soundManager.unlock();
+                soundManager.playPistol();
+                soundManager.startBoomboxMusic();
+                onStartStory(1);
+              }}
+              className="w-full flex items-center justify-center gap-3 px-8 py-3.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-heading text-xl sm:text-2xl font-bold uppercase tracking-wider rounded-md shadow-[0_0_25px_rgba(220,38,38,0.5)] transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
             >
-              <Play className="w-6 h-6 fill-current" />
-              <span>START COMBAT</span>
+              <Play className="w-6 h-6 fill-current text-white" />
+              <span>STORY MODE: CHAPTER 1</span>
             </button>
 
+            {/* Secondary Modes */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => {
+                  soundManager.unlock();
+                  soundManager.playPunch();
+                  onOpenChapterSelect();
+                }}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#181a22] hover:bg-[#202430] text-amber-400 border border-amber-600/60 font-heading text-sm sm:text-base font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
+              >
+                <Radio className="w-4 h-4 text-amber-400" />
+                <span>SELECT CHAPTER</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  soundManager.unlock();
+                  soundManager.playPistol();
+                  soundManager.startCombatMusic();
+                  onStartArena();
+                }}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#181a22] hover:bg-[#202430] text-slate-200 border border-slate-700 font-heading text-sm sm:text-base font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
+              >
+                <Flame className="w-4 h-4 text-red-500" />
+                <span>SURVIVAL ARENA</span>
+              </button>
+            </div>
+
+            {/* How to Play Guide */}
             <button
               onClick={onOpenHowToPlay}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-[#1e222b] hover:bg-[#282d38] text-slate-200 border border-slate-700 font-heading text-lg font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 bg-[#12141a] hover:bg-[#1a1c24] text-slate-400 hover:text-slate-200 border border-slate-800 font-mono-tech text-xs uppercase tracking-wider rounded-md transition-colors cursor-pointer"
             >
-              <HelpCircle className="w-5 h-5 text-amber-400" />
-              <span>HOW TO PLAY</span>
+              <HelpCircle className="w-4 h-4 text-amber-400" />
+              <span>CONTROLS & HOW TO PLAY</span>
             </button>
           </div>
 

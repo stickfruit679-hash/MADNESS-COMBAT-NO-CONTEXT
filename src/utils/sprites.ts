@@ -86,11 +86,13 @@ export function drawGrunt(
   ctx: CanvasRenderingContext2D, 
   char: Character, 
   time: number, 
-  goreSetting: GoreSetting = 'default'
+  goreSetting: GoreSetting = 'default',
+  storyChapter: number = 0
 ) {
   const images = spriteManager.images;
   const isAgent = char.enemyType === 'agent';
   const isHurt = char.hurtTimer > 0;
+  const isPlayerHank = !!char.isPlayer;
 
   ctx.save();
   ctx.translate(char.x, char.y);
@@ -140,28 +142,56 @@ export function drawGrunt(
   const rightFootX = 12 - (isWalking ? walkOffset * 10 : 0);
   const rightFootY = footYBase - (isWalking ? Math.max(0, walkCos) * 7 : 0);
 
-  if (footImgL) {
-    ctx.drawImage(footImgL, leftFootX - footWidth / 2, leftFootY - footHeight / 2, footWidth, footHeight);
-  } else {
-    ctx.fillStyle = '#2b2e33';
+  // Final Level: Black Ninja Boots for Hank
+  if (isPlayerHank && storyChapter >= 4) {
+    ctx.save();
+    ctx.fillStyle = '#09090b';
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(leftFootX - 10, leftFootY - 5, 20, 10, 5);
-    ctx.fill();
-    ctx.stroke();
-  }
 
-  if (footImgR) {
-    ctx.drawImage(footImgR, rightFootX - footWidth / 2, rightFootY - footHeight / 2, footWidth, footHeight);
-  } else {
-    ctx.fillStyle = '#2b2e33';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
+    // Left ninja boot
     ctx.beginPath();
-    ctx.roundRect(rightFootX - 10, rightFootY - 5, 20, 10, 5);
+    ctx.roundRect(leftFootX - 10, leftFootY - 5, 20, 10, 4);
     ctx.fill();
     ctx.stroke();
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(leftFootX - 7, leftFootY - 9, 14, 5);
+    ctx.strokeRect(leftFootX - 7, leftFootY - 9, 14, 5);
+
+    // Right ninja boot
+    ctx.fillStyle = '#09090b';
+    ctx.beginPath();
+    ctx.roundRect(rightFootX - 10, rightFootY - 5, 20, 10, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(rightFootX - 7, rightFootY - 9, 14, 5);
+    ctx.strokeRect(rightFootX - 7, rightFootY - 9, 14, 5);
+    ctx.restore();
+  } else {
+    if (footImgL) {
+      ctx.drawImage(footImgL, leftFootX - footWidth / 2, leftFootY - footHeight / 2, footWidth, footHeight);
+    } else {
+      ctx.fillStyle = '#2b2e33';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(leftFootX - 10, leftFootY - 5, 20, 10, 5);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    if (footImgR) {
+      ctx.drawImage(footImgR, rightFootX - footWidth / 2, rightFootY - footHeight / 2, footWidth, footHeight);
+    } else {
+      ctx.fillStyle = '#2b2e33';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(rightFootX - 10, rightFootY - 5, 20, 10, 5);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   // 3. TORSO (Gray coat with persistent blood stains and extreme gore wounds)
@@ -186,16 +216,118 @@ export function drawGrunt(
     ? (images.torsoRight || images.torsoLeft) 
     : (images.torsoLeft || images.torsoRight);
 
-  if (torsoImg) {
-    ctx.drawImage(torsoImg, -singleTorsoW / 2, -singleTorsoH / 2, singleTorsoW, singleTorsoH);
-  } else {
-    ctx.fillStyle = isAgent ? '#18181b' : '#71717a';
+  if (isPlayerHank && storyChapter >= 4) {
+    // FINAL LEVEL: Tactical Black Ninja Outfit
+    ctx.fillStyle = '#121316';
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.roundRect(-singleTorsoW / 2, -singleTorsoH / 2, singleTorsoW, singleTorsoH, [12, 12, 5, 5]);
+    ctx.roundRect(-singleTorsoW / 2, -singleTorsoH / 2, singleTorsoW, singleTorsoH, [10, 10, 4, 4]);
     ctx.fill();
     ctx.stroke();
+
+    // Cross harness tactical straps
+    ctx.strokeStyle = '#27272a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-singleTorsoW * 0.4, -singleTorsoH * 0.42);
+    ctx.lineTo(singleTorsoW * 0.35, singleTorsoH * 0.35);
+    ctx.moveTo(singleTorsoW * 0.4, -singleTorsoH * 0.42);
+    ctx.lineTo(-singleTorsoW * 0.35, singleTorsoH * 0.35);
+    ctx.stroke();
+
+    // Central tactical chest buckle
+    ctx.fillStyle = '#52525b';
+    ctx.strokeStyle = '#09090b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, -singleTorsoH * 0.05, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Utility belt
+    ctx.fillStyle = '#18181b';
+    ctx.strokeStyle = '#09090b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-singleTorsoW / 2 - 1, singleTorsoH * 0.28, singleTorsoW + 2, 8, 2);
+    ctx.fill();
+    ctx.stroke();
+    // Belt buckle
+    ctx.fillStyle = '#71717a';
+    ctx.fillRect(-4, singleTorsoH * 0.28 + 1, 8, 6);
+
+    // Stained with a bit of blood (as requested for the ninja outfit!)
+    ctx.fillStyle = '#881337';
+    ctx.beginPath();
+    ctx.arc(-singleTorsoW * 0.22, -singleTorsoH * 0.15, 3.8, 0, Math.PI * 2);
+    ctx.arc(-singleTorsoW * 0.14, -singleTorsoH * 0.04, 2.5, 0, Math.PI * 2);
+    ctx.arc(singleTorsoW * 0.25, singleTorsoH * 0.12, 3.2, 0, Math.PI * 2);
+    ctx.arc(singleTorsoW * 0.3, singleTorsoH * 0.22, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+  } else {
+    if (torsoImg) {
+      ctx.drawImage(torsoImg, -singleTorsoW / 2, -singleTorsoH / 2, singleTorsoW, singleTorsoH);
+    } else {
+      ctx.fillStyle = isAgent ? '#18181b' : '#71717a';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-singleTorsoW / 2, -singleTorsoH / 2, singleTorsoW, singleTorsoH, [12, 12, 5, 5]);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // ACCUMULATE STORY BANDAGES ON TORSO
+  if (isPlayerHank && storyChapter === 2) {
+    // Chapter 2: First torso bandage wrap
+    ctx.fillStyle = '#f4f4f5';
+    ctx.strokeStyle = '#a1a1aa';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-singleTorsoW * 0.46, singleTorsoH * 0.12, singleTorsoW * 0.92, 8);
+    ctx.strokeRect(-singleTorsoW * 0.46, singleTorsoH * 0.12, singleTorsoW * 0.92, 8);
+    // Subtle blood seep spot
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.arc(singleTorsoW * 0.1, singleTorsoH * 0.16, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (isPlayerHank && storyChapter === 3) {
+    // Chapter 3: Criss-crossed heavy medical gauze bandages with blood seeping through
+    ctx.strokeStyle = '#f4f4f5';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-singleTorsoW * 0.45, -singleTorsoH * 0.22);
+    ctx.lineTo(singleTorsoW * 0.45, singleTorsoH * 0.14);
+    ctx.moveTo(-singleTorsoW * 0.45, singleTorsoH * 0.1);
+    ctx.lineTo(singleTorsoW * 0.45, -singleTorsoH * 0.26);
+    ctx.stroke();
+
+    // Gauze texture border lines
+    ctx.strokeStyle = '#d4d4d8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-singleTorsoW * 0.45, -singleTorsoH * 0.22 - 3);
+    ctx.lineTo(singleTorsoW * 0.45, singleTorsoH * 0.14 - 3);
+    ctx.moveTo(-singleTorsoW * 0.45, -singleTorsoH * 0.22 + 3);
+    ctx.lineTo(singleTorsoW * 0.45, singleTorsoH * 0.14 + 3);
+    ctx.stroke();
+
+    // Belly gauze wrap
+    ctx.fillStyle = '#f4f4f5';
+    ctx.strokeStyle = '#a1a1aa';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-singleTorsoW * 0.48, singleTorsoH * 0.18, singleTorsoW * 0.96, 9);
+    ctx.strokeRect(-singleTorsoW * 0.48, singleTorsoH * 0.18, singleTorsoW * 0.96, 9);
+
+    // Seeping dark red blood spots
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.arc(-singleTorsoW * 0.1, -singleTorsoH * 0.05, 3.5, 0, Math.PI * 2);
+    ctx.arc(singleTorsoW * 0.15, singleTorsoH * 0.22, 4, 0, Math.PI * 2);
+    ctx.arc(singleTorsoW * 0.22, singleTorsoH * 0.24, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // PERSISTENT BLOOD ON CLOTHING (Torso Stains)
@@ -305,6 +437,207 @@ export function drawGrunt(
     ctx.stroke();
   }
 
+  // ACCUMULATE STORY BANDAGES ON HEAD
+  if (isPlayerHank && storyChapter === 2) {
+    // Chapter 2: Bandage strip on head/temple
+    ctx.save();
+    ctx.fillStyle = '#f4f4f5';
+    ctx.strokeStyle = '#a1a1aa';
+    ctx.lineWidth = 1.5;
+    ctx.translate(isFacingRight ? 5 : -5, -8);
+    ctx.rotate(isFacingRight ? -0.15 : 0.15);
+    ctx.fillRect(-14, -4, 28, 8);
+    ctx.strokeRect(-14, -4, 28, 8);
+    // Blood spot on forehead bandage
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.arc(isFacingRight ? 3 : -3, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (isPlayerHank && storyChapter === 3) {
+    // Chapter 3: Heavy gauze wrapping around chin/jaw, and across forehead
+    ctx.save();
+    // 1. Chin & Jaw wrap
+    ctx.fillStyle = '#f4f4f5';
+    ctx.strokeStyle = '#a1a1aa';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(0, 13, 17, 12, 0, 0, Math.PI);
+    ctx.fill();
+    ctx.stroke();
+
+    // Jaw gauze line texture
+    ctx.strokeStyle = '#d4d4d8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-15, 16);
+    ctx.lineTo(15, 16);
+    ctx.moveTo(-13, 21);
+    ctx.lineTo(13, 21);
+    ctx.stroke();
+
+    // 2. Forehead wrap
+    ctx.fillStyle = '#f4f4f5';
+    ctx.strokeStyle = '#a1a1aa';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.rect(-18, -14, 36, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // 3. Bloody seep patches through head gauze
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.arc(isFacingRight ? 7 : -7, -9, 3.5, 0, Math.PI * 2);
+    ctx.arc(0, 17, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (isPlayerHank && storyChapter >= 4) {
+    // FINAL LEVEL: ICONIC BLACK BANDANA & RED GOGGLES & BLOOD STAINS
+    ctx.save();
+
+    // 1. Fluttering Bandana knot tails trailing behind
+    const knotX = isFacingRight ? -16 : 16;
+    const knotY = -8;
+    const wave1 = Math.sin(time * 9) * 4;
+    const wave2 = Math.cos(time * 8.5) * 4;
+
+    ctx.fillStyle = '#121316';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    // Knot base
+    ctx.beginPath();
+    ctx.arc(knotX, knotY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Ribbon Tail 1
+    ctx.beginPath();
+    ctx.moveTo(knotX, knotY);
+    ctx.quadraticCurveTo(
+      knotX + (isFacingRight ? -14 : 14), 
+      knotY - 2 + wave1, 
+      knotX + (isFacingRight ? -25 : 25), 
+      knotY + 4 + wave1
+    );
+    ctx.lineTo(knotX + (isFacingRight ? -23 : 23), knotY + 9 + wave1);
+    ctx.quadraticCurveTo(
+      knotX + (isFacingRight ? -12 : 12), 
+      knotY + 4 + wave1, 
+      knotX, 
+      knotY + 3
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Ribbon Tail 2
+    ctx.beginPath();
+    ctx.moveTo(knotX, knotY);
+    ctx.quadraticCurveTo(
+      knotX + (isFacingRight ? -16 : 16), 
+      knotY + 6 + wave2, 
+      knotX + (isFacingRight ? -30 : 30), 
+      knotY + 16 + wave2
+    );
+    ctx.lineTo(knotX + (isFacingRight ? -27 : 27), knotY + 21 + wave2);
+    ctx.quadraticCurveTo(
+      knotX + (isFacingRight ? -13 : 13), 
+      knotY + 10 + wave2, 
+      knotX, 
+      knotY + 4
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 2. Black Bandana Cowl over crown and top of the head
+    ctx.fillStyle = '#121316';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, -5, 23, Math.PI, 0, false);
+    ctx.quadraticCurveTo(0, -2, -23, -5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Bandana fold highlight
+    ctx.strokeStyle = '#27272a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, -5, 20, Math.PI + 0.3, -0.3, false);
+    ctx.stroke();
+
+    // 3. Elastic Goggle Strap running horizontally around the head
+    ctx.strokeStyle = '#09090b';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-22, 2);
+    ctx.lineTo(22, 2);
+    ctx.stroke();
+
+    // 4. Glowing Red Circular Goggles (Iconic MC Hank Goggles!)
+    const goggleOffset = isFacingRight ? 5 : -5;
+    const goggleRadius = 9;
+
+    const g1x = goggleOffset - (isFacingRight ? 7 : 4);
+    const g1y = 2;
+    const g2x = goggleOffset + (isFacingRight ? 4 : -7);
+    const g2y = 2;
+
+    // Goggle bridge connector
+    ctx.strokeStyle = '#09090b';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(g1x, g1y);
+    ctx.lineTo(g2x, g2y);
+    ctx.stroke();
+
+    [ { x: g1x, y: g1y }, { x: g2x, y: g2y } ].forEach((g) => {
+      // Black outer rim
+      ctx.fillStyle = '#09090b';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, goggleRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glowing Red Lens
+      ctx.save();
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 9;
+
+      const lensGrad = ctx.createRadialGradient(g.x - 2, g.y - 2, 1, g.x, g.y, goggleRadius - 2.5);
+      lensGrad.addColorStop(0, '#f87171');
+      lensGrad.addColorStop(0.4, '#ef4444');
+      lensGrad.addColorStop(1, '#991b1b');
+      ctx.fillStyle = lensGrad;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, goggleRadius - 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Specular highlight gleam on lens
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.beginPath();
+      ctx.arc(g.x - 2.5, g.y - 2.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 5. Stained with a bit of blood on the bandana / cheek!
+    ctx.fillStyle = '#881337';
+    ctx.beginPath();
+    ctx.arc(isFacingRight ? -6 : 6, -12, 3, 0, Math.PI * 2);
+    ctx.arc(isFacingRight ? -10 : 10, -14, 2, 0, Math.PI * 2);
+    ctx.arc(isFacingRight ? 12 : -12, 13, 2.5, 0, Math.PI * 2);
+    ctx.arc(isFacingRight ? 14 : -14, 16, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   // PERSISTENT BLOOD ON HEAD / FACE
   if (goreSetting !== 'no_blood' && char.bloodStains && char.bloodStains.length > 0) {
     ctx.save();
@@ -375,10 +708,32 @@ export function drawGrunt(
       ctx.restore();
     }
 
-    [ { x: lHandX, y: lHandY }, { x: rHandX, y: rHandY } ].forEach(h => {
+    [ { x: lHandX, y: lHandY, isLeft: true }, { x: rHandX, y: rHandY, isLeft: false } ].forEach(h => {
       ctx.save();
       ctx.translate(h.x, h.y);
-      if (handImg) {
+      if (isPlayerHank && storyChapter >= 4) {
+        // Black tactical ninja gloves!
+        ctx.fillStyle = '#18181b';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (isPlayerHank && storyChapter === 3 && h.isLeft) {
+        // Left hand white medical gauze wrap
+        ctx.fillStyle = '#f4f4f5';
+        ctx.strokeStyle = '#71717a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#991b1b';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (handImg) {
         ctx.drawImage(handImg, -handSize / 2, -handSize / 2, handSize, handSize);
       } else {
         ctx.fillStyle = '#a1a1aa';

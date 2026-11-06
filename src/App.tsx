@@ -4,7 +4,16 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameView, GameStats, WeaponType, Weapon, GoreSetting, BloodAmount } from './types/game';
+import { 
+  GameView, 
+  GameStats, 
+  WeaponType, 
+  Weapon, 
+  GoreSetting, 
+  BloodAmount, 
+  GameMode, 
+  STORY_CHAPTERS 
+} from './types/game';
 import { createWeaponInstance } from './utils/weapons';
 import { soundManager } from './audio/soundManager';
 import { inputController } from './utils/inputController';
@@ -15,13 +24,29 @@ import { MobileControls } from './components/MobileControls';
 import { HowToPlayModal } from './components/HowToPlayModal';
 import { GameOverModal } from './components/GameOverModal';
 import { PauseModal } from './components/PauseModal';
+import { ChapterVictoryModal } from './components/ChapterVictoryModal';
+import { ChapterSelectModal } from './components/ChapterSelectModal';
 
 export default function App() {
   const [view, setView] = useState<GameView>('INTRO_NEURON');
+  const [gameMode, setGameMode] = useState<GameMode>('story');
+  const [currentChapterId, setCurrentChapterId] = useState<number>(1);
   const [showHowToPlay, setShowHowToPlay] = useState<boolean>(false);
+  const [showChapterSelect, setShowChapterSelect] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [slowMoActive, setSlowMoActive] = useState<boolean>(false);
+
+  // Highest chapter reached/unlocked
+  const [unlockedChapterMax, setUnlockedChapterMax] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('mc_unlocked_chapter');
+      if (saved) return parseInt(saved, 10) || 1;
+    } catch {
+      // fallback
+    }
+    return 4; // Default to allow playing any chapter
+  });
 
   // Session ID to reset the GameCanvas completely when restarting
   const [gameSessionId, setGameSessionId] = useState<number>(0);
@@ -40,7 +65,6 @@ export default function App() {
   });
 
   // Blood amount setting: 'very_little' | 'not_much' | 'too_much'
-  // Default is 'not_much' (clean, reduced blood to prevent any lag)
   const [bloodAmount, setBloodAmount] = useState<BloodAmount>(() => {
     try {
       const saved = localStorage.getItem('mc_blood_amount');
@@ -59,7 +83,16 @@ export default function App() {
   // Weapons & Player State (250 HP gives protagonist enough durability)
   const playerMaxHealth = 250;
   const [playerHealth, setPlayerHealth] = useState<number>(250);
-  const [currentWeapon, setCurrentWeapon] = useState<Weapon>(createWeaponInstance('pistol'));
+  const [currentWeapon, setCurrentWeapon] = useState<Weapon>(createWeaponInstance('fists'));
+  // Story Mode: weapons start locked (except fists in Ch 1) and unlock upon picking them up
+  const [unlockedWeapons, setUnlockedWeapons] = useState<WeaponType[]>(['fists']);
+
+  const handleUnlockWeapon = useCallback((weaponType: WeaponType) => {
+    setUnlockedWeapons((prev) => {
+      if (prev.includes(weaponType)) return prev;
+      return [...prev, weaponType];
+    });
+  }, []);
 
   // Game Stats
   const [stats, setStats] = useState<GameStats>({
@@ -71,6 +104,11 @@ export default function App() {
     comboStreak: 0,
     maxCombo: 0,
     timeAlive: 0,
+    storyProgress: {
+      chapterId: 1,
+      gruntsKilled: 0,
+      gruntsTotal: 30,
+    },
   });
 
   // Auto detect mobile/touch devices or small screen
@@ -113,12 +151,64 @@ export default function App() {
     handleSelectBloodAmount(order[nextIdx]);
   }, [bloodAmount, handleSelectBloodAmount]);
 
-  // Reset Game for new session (Full reset!)
-  const startNewGame = useCallback(() => {
+  // Start Story Mode Campaign (Specific Chapter)
+  const startStoryGame = useCallback((chapterId: number = 1) => {
     inputController.resetAll();
-    setGameSessionId((prev) => prev + 1); // Triggers full GameCanvas entity & player wipe
+    const chapter = STORY_CHAPTERS.find((c) => c.id === chapterId) || STORY_CHAPTERS[0];
+    
+    setGameMode('story');
+    setCurrentChapterId(chapter.id);
+    setCurrentWeapon(createWeaponInstance(chapter.startingWeapon));
+    // In story mode, weapons unlock as picked up from fallen grunts!
+    if (chapter.id === 1) {
+      setUnlockedWeapons(['fists']);
+    } else {
+      setUnlockedWeapons((prev) => {
+        const set = new Set<WeaponType>(['fists', chapter.startingWeapon, ...prev]);
+        return Array.from(set);
+      });
+    }
     setPlayerHealth(250);
+    setGameSessionId((prev) => prev + 1);
+    setStats({
+      score: 0,
+      kills: 0,
+      wave: 1,
+      shotsFired: 0,
+      shotsHit: 0,
+      comboStreak: 0,
+      maxCombo: 0,
+      timeAlive: 0,
+      storyProgress: {
+        chapterId: chapter.id,
+        gruntsKilled: 0,
+        gruntsTotal: chapter.totalGrunts,
+      },
+    });
+
+    setSlowMoActive(false);
+    setIsPaused(false);
+    setView('PLAYING');
+
+    // Start Appropriate Audio Track
+    if (soundEnabled) {
+      if (chapter.musicType === 'boombox') {
+        soundManager.startBoomboxMusic();
+      } else {
+        soundManager.startCombatMusic();
+      }
+    }
+  }, [soundEnabled]);
+
+  // Start Survival Arena (Endless Wave Mode / Normal Mode)
+  const startArenaGame = useCallback(() => {
+    inputController.resetAll();
+    setGameMode('arena');
     setCurrentWeapon(createWeaponInstance('pistol'));
+    // In normal mode, all weapons are unlocked immediately
+    setUnlockedWeapons(['fists', 'knife', 'pistol', 'shotgun', 'uzi']);
+    setPlayerHealth(250);
+    setGameSessionId((prev) => prev + 1);
     setStats({
       score: 0,
       kills: 0,
@@ -129,10 +219,44 @@ export default function App() {
       maxCombo: 0,
       timeAlive: 0,
     });
+
     setSlowMoActive(false);
     setIsPaused(false);
     setView('PLAYING');
-  }, []);
+
+    if (soundEnabled) {
+      soundManager.startCombatMusic();
+    }
+  }, [soundEnabled]);
+
+  // Restart Current Mode/Chapter
+  const restartCurrentGame = useCallback(() => {
+    if (gameMode === 'story') {
+      startStoryGame(currentChapterId);
+    } else {
+      startArenaGame();
+    }
+  }, [currentChapterId, gameMode, startArenaGame, startStoryGame]);
+
+  // Handle Chapter Completed Victory
+  const handleChapterComplete = useCallback(() => {
+    inputController.resetAll();
+    soundManager.stopMusic();
+    
+    // Unlock next chapter in storage
+    const nextChapter = currentChapterId + 1;
+    setUnlockedChapterMax((prev) => {
+      const updated = Math.max(prev, nextChapter);
+      try {
+        localStorage.setItem('mc_unlocked_chapter', updated.toString());
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    setView('CHAPTER_VICTORY');
+  }, [currentChapterId]);
 
   // Handle Player Death
   const handlePlayerDeath = useCallback(() => {
@@ -152,11 +276,15 @@ export default function App() {
     soundManager.sfxEnabled = next;
     soundManager.musicEnabled = next;
     if (!next) {
-      soundManager.stopCombatMusic();
+      soundManager.stopMusic();
     } else if (view === 'PLAYING') {
-      soundManager.startCombatMusic();
+      if (gameMode === 'story' && currentChapterId === 1) {
+        soundManager.startBoomboxMusic();
+      } else {
+        soundManager.startCombatMusic();
+      }
     }
-  }, [soundEnabled, view]);
+  }, [currentChapterId, gameMode, soundEnabled, view]);
 
   // Slow-Mo Toggle
   const toggleSlowMo = useCallback(() => {
@@ -167,26 +295,35 @@ export default function App() {
 
   // Weapon Hotbar Selector
   const handleSelectWeapon = useCallback((type: WeaponType) => {
+    if (gameMode === 'story' && !unlockedWeapons.includes(type)) {
+      soundManager.playDryFire();
+      return;
+    }
     const newWeapon = createWeaponInstance(type);
     setCurrentWeapon(newWeapon);
     soundManager.playPistol();
-  }, []);
+  }, [gameMode, unlockedWeapons]);
 
   // Cycle Weapon on Mobile
   const handleCycleWeapon = useCallback(() => {
-    const types: WeaponType[] = ['fists', 'knife', 'pistol', 'shotgun', 'uzi'];
+    const types: WeaponType[] = gameMode === 'story'
+      ? unlockedWeapons
+      : ['fists', 'knife', 'pistol', 'shotgun', 'uzi'];
+    if (types.length <= 1) return;
     const currentIndex = types.indexOf(currentWeapon.type);
     const nextType = types[(currentIndex + 1) % types.length];
     handleSelectWeapon(nextType);
-  }, [currentWeapon.type, handleSelectWeapon]);
+  }, [currentWeapon.type, gameMode, handleSelectWeapon, unlockedWeapons]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#0a0c10] select-none text-slate-100">
       
-      {/* 1. INTRO SEQUENCE ("Powered By Neuron" -> "MADNESS COMBAT: NO CONTEXT") */}
+      {/* 1. INTRO / TITLE SCREEN */}
       {view === 'INTRO_NEURON' && (
         <IntroScreen
-          onStartGame={startNewGame}
+          onStartStory={(chId) => startStoryGame(chId || 1)}
+          onStartArena={startArenaGame}
+          onOpenChapterSelect={() => setShowChapterSelect(true)}
           onOpenHowToPlay={() => setShowHowToPlay(true)}
           goreSetting={goreSetting}
           onSelectGoreSetting={handleSelectGoreSetting}
@@ -196,10 +333,12 @@ export default function App() {
       )}
 
       {/* 2. ACTIVE PLAY VIEW */}
-      {(view === 'PLAYING' || view === 'PAUSED' || view === 'GAME_OVER') && (
+      {(view === 'PLAYING' || view === 'PAUSED' || view === 'GAME_OVER' || view === 'CHAPTER_VICTORY') && (
         <div className="relative w-full h-full">
           {/* Main Canvas Engine */}
           <GameCanvas
+            gameMode={gameMode}
+            currentChapterId={currentChapterId}
             gameSessionId={gameSessionId}
             stats={stats}
             onUpdateStats={setStats}
@@ -207,19 +346,25 @@ export default function App() {
             onPlayerHealthUpdate={(curr) => setPlayerHealth(curr)}
             currentWeaponType={currentWeapon.type}
             onWeaponChange={setCurrentWeapon}
+            unlockedWeapons={unlockedWeapons}
+            onUnlockWeapon={handleUnlockWeapon}
             slowMoActive={slowMoActive}
             onToggleSlowMo={toggleSlowMo}
-            isPaused={isPaused || view === 'GAME_OVER'}
+            isPaused={isPaused || view === 'GAME_OVER' || view === 'CHAPTER_VICTORY'}
             goreSetting={goreSetting}
             bloodAmount={bloodAmount}
+            onChapterComplete={handleChapterComplete}
           />
 
           {/* In-Game Heads-Up Display */}
           <GameHUD
+            gameMode={gameMode}
+            currentChapterId={currentChapterId}
             health={playerHealth}
             maxHealth={playerMaxHealth}
             weapon={currentWeapon}
             stats={stats}
+            unlockedWeapons={unlockedWeapons}
             slowMoActive={slowMoActive}
             slowMoAvailable={stats.comboStreak >= 3 || slowMoActive}
             soundEnabled={soundEnabled}
@@ -249,14 +394,34 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. PAUSE MENU */}
+      {/* 3. CHAPTER VICTORY MODAL */}
+      {view === 'CHAPTER_VICTORY' && (
+        <ChapterVictoryModal
+          currentChapterId={currentChapterId}
+          stats={stats}
+          onNextChapter={() => {
+            const nextCh = currentChapterId + 1;
+            if (nextCh <= STORY_CHAPTERS.length) {
+              startStoryGame(nextCh);
+            }
+          }}
+          onReplayChapter={restartCurrentGame}
+          onChapterSelect={() => setShowChapterSelect(true)}
+          onMainMenu={() => {
+            soundManager.stopMusic();
+            setView('INTRO_NEURON');
+          }}
+        />
+      )}
+
+      {/* 4. PAUSE MENU */}
       {isPaused && (
         <PauseModal
           onResume={() => setIsPaused(false)}
-          onRestart={startNewGame}
+          onRestart={restartCurrentGame}
           onMainMenu={() => {
             setIsPaused(false);
-            soundManager.stopCombatMusic();
+            soundManager.stopMusic();
             setView('INTRO_NEURON');
           }}
           onOpenHowToPlay={() => setShowHowToPlay(true)}
@@ -271,23 +436,35 @@ export default function App() {
         />
       )}
 
-      {/* 4. GAME OVER SCREEN */}
+      {/* 5. GAME OVER SCREEN */}
       {view === 'GAME_OVER' && (
         <GameOverModal
           stats={stats}
-          onRestart={startNewGame}
+          onRestart={restartCurrentGame}
           onMainMenu={() => {
-            soundManager.stopCombatMusic();
+            soundManager.stopMusic();
             setView('INTRO_NEURON');
           }}
         />
       )}
 
-      {/* 5. HOW TO PLAY / CONTROLS MODAL */}
+      {/* 6. HOW TO PLAY / CONTROLS MODAL */}
       {showHowToPlay && (
         <HowToPlayModal
           onClose={() => setShowHowToPlay(false)}
-          onStartGame={view === 'INTRO_NEURON' ? startNewGame : undefined}
+          onStartGame={view === 'INTRO_NEURON' ? () => startStoryGame(1) : undefined}
+        />
+      )}
+
+      {/* 7. CHAPTER SELECT MODAL */}
+      {showChapterSelect && (
+        <ChapterSelectModal
+          onClose={() => setShowChapterSelect(false)}
+          onSelectChapter={(chapterId) => {
+            setShowChapterSelect(false);
+            startStoryGame(chapterId);
+          }}
+          unlockedChapterMax={unlockedChapterMax}
         />
       )}
 
