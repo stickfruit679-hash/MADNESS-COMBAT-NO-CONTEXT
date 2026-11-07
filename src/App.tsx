@@ -26,6 +26,9 @@ import { GameOverModal } from './components/GameOverModal';
 import { PauseModal } from './components/PauseModal';
 import { ChapterVictoryModal } from './components/ChapterVictoryModal';
 import { ChapterSelectModal } from './components/ChapterSelectModal';
+import { MultiplayerModal } from './components/MultiplayerModal';
+import { MultiplayerServer, GruntAvatarId } from './types/multiplayer';
+import { multiplayerService } from './services/multiplayerService';
 
 export default function App() {
   const [view, setView] = useState<GameView>('INTRO_NEURON');
@@ -33,6 +36,10 @@ export default function App() {
   const [currentChapterId, setCurrentChapterId] = useState<number>(1);
   const [showHowToPlay, setShowHowToPlay] = useState<boolean>(false);
   const [showChapterSelect, setShowChapterSelect] = useState<boolean>(false);
+  const [showMultiplayerModal, setShowMultiplayerModal] = useState<boolean>(false);
+  const [multiplayerServer, setMultiplayerServer] = useState<MultiplayerServer | null>(null);
+  const [playerAvatar, setPlayerAvatar] = useState<GruntAvatarId>(() => multiplayerService.getProfile().avatar);
+  const [playerName, setPlayerName] = useState<string>(() => multiplayerService.getProfile().name);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [slowMoActive, setSlowMoActive] = useState<boolean>(false);
@@ -156,6 +163,7 @@ export default function App() {
     inputController.resetAll();
     const chapter = STORY_CHAPTERS.find((c) => c.id === chapterId) || STORY_CHAPTERS[0];
     
+    setMultiplayerServer(null);
     setGameMode('story');
     setCurrentChapterId(chapter.id);
     setCurrentWeapon(createWeaponInstance(chapter.startingWeapon));
@@ -203,9 +211,58 @@ export default function App() {
   // Start Survival Arena (Endless Wave Mode / Normal Mode)
   const startArenaGame = useCallback(() => {
     inputController.resetAll();
+    setMultiplayerServer(null);
     setGameMode('arena');
     setCurrentWeapon(createWeaponInstance('pistol'));
     // In normal mode, all weapons are unlocked immediately
+    setUnlockedWeapons(['fists', 'knife', 'pistol', 'shotgun', 'uzi']);
+    setPlayerHealth(250);
+    setGameSessionId((prev) => prev + 1);
+    setStats({
+      score: 0,
+      kills: 0,
+      wave: 1,
+      shotsFired: 0,
+      shotsHit: 0,
+      comboStreak: 0,
+      maxCombo: 0,
+      timeAlive: 0,
+    });
+
+    setSlowMoActive(false);
+    setIsPaused(false);
+    setView('PLAYING');
+
+    if (soundEnabled) {
+      soundManager.startCombatMusic();
+    }
+  }, [soundEnabled]);
+
+  // Launch Multiplayer Match (from Lobby or Host)
+  const handleLaunchMultiplayerMatch = useCallback((server: MultiplayerServer) => {
+    setShowMultiplayerModal(false);
+    inputController.resetAll();
+    
+    const prof = multiplayerService.getProfile();
+    setMultiplayerServer(server);
+    setPlayerAvatar(prof.avatar);
+    setPlayerName(prof.name);
+
+    // Configure environment based on server map
+    if (server.map === 'field_tree') {
+      setCurrentChapterId(1);
+    } else if (server.map === 'desert_sun') {
+      setCurrentChapterId(2);
+    } else if (server.map === 'bunker') {
+      setCurrentChapterId(3);
+    } else if (server.map === 'club_m') {
+      setCurrentChapterId(4);
+    } else {
+      setCurrentChapterId(2);
+    }
+
+    setGameMode('arena');
+    setCurrentWeapon(createWeaponInstance('uzi'));
     setUnlockedWeapons(['fists', 'knife', 'pistol', 'shotgun', 'uzi']);
     setPlayerHealth(250);
     setGameSessionId((prev) => prev + 1);
@@ -325,6 +382,7 @@ export default function App() {
           onStartArena={startArenaGame}
           onOpenChapterSelect={() => setShowChapterSelect(true)}
           onOpenHowToPlay={() => setShowHowToPlay(true)}
+          onOpenMultiplayer={() => setShowMultiplayerModal(true)}
           goreSetting={goreSetting}
           onSelectGoreSetting={handleSelectGoreSetting}
           bloodAmount={bloodAmount}
@@ -354,6 +412,9 @@ export default function App() {
             goreSetting={goreSetting}
             bloodAmount={bloodAmount}
             onChapterComplete={handleChapterComplete}
+            playerAvatar={playerAvatar}
+            playerName={playerName}
+            multiplayerServer={multiplayerServer}
           />
 
           {/* In-Game Heads-Up Display */}
@@ -465,6 +526,14 @@ export default function App() {
             startStoryGame(chapterId);
           }}
           unlockedChapterMax={unlockedChapterMax}
+        />
+      )}
+
+      {/* 8. MULTIPLAYER LOBBY & SERVER HUB MODAL */}
+      {showMultiplayerModal && (
+        <MultiplayerModal
+          onClose={() => setShowMultiplayerModal(false)}
+          onLaunchMatch={handleLaunchMultiplayerMatch}
         />
       )}
 

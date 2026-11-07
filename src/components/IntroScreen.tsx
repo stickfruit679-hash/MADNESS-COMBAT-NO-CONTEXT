@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, HelpCircle, Volume2, VolumeX, ShieldAlert, Crosshair, Skull, ShieldCheck, Flame, Droplet, AlertTriangle, Radio } from 'lucide-react';
+import { Play, HelpCircle, Volume2, VolumeX, ShieldAlert, Crosshair, Skull, ShieldCheck, Flame, Droplet, AlertTriangle, Radio, Users } from 'lucide-react';
 import { soundManager } from '../audio/soundManager';
 import { GoreSetting, BloodAmount } from '../types/game';
 
@@ -8,6 +8,7 @@ interface IntroScreenProps {
   onStartArena: () => void;
   onOpenChapterSelect: () => void;
   onOpenHowToPlay: () => void;
+  onOpenMultiplayer: () => void;
   goreSetting: GoreSetting;
   onSelectGoreSetting: (setting: GoreSetting) => void;
   bloodAmount: BloodAmount;
@@ -19,6 +20,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({
   onStartArena,
   onOpenChapterSelect,
   onOpenHowToPlay,
+  onOpenMultiplayer,
   goreSetting,
   onSelectGoreSetting,
   bloodAmount,
@@ -199,7 +201,20 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({
 
           {/* Action Menu Buttons */}
           <div className="flex flex-col gap-2.5 w-full max-w-md mt-2">
-            {/* Primary: STORY MODE (Where It All Started) */}
+            {/* 1. TOP PRIMARY MENU OPTION: MULTIPLAYER */}
+            <button
+              onClick={() => {
+                soundManager.unlock();
+                soundManager.playIntroHit();
+                onOpenMultiplayer();
+              }}
+              className="w-full flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-red-700 via-red-600 to-amber-600 hover:from-red-600 hover:to-amber-500 active:scale-[0.98] text-white font-heading text-2xl sm:text-3xl font-black uppercase tracking-wider rounded-md shadow-[0_0_30px_rgba(220,38,38,0.7)] transition-all transform hover:scale-[1.02] cursor-pointer border border-amber-400/50"
+            >
+              <Users className="w-7 h-7 text-amber-300 drop-shadow" />
+              <span>MULTIPLAYER</span>
+            </button>
+
+            {/* 2. STORY MODE (Where It All Started) */}
             <button
               onClick={() => {
                 soundManager.unlock();
@@ -207,9 +222,9 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({
                 soundManager.startBoomboxMusic();
                 onStartStory(1);
               }}
-              className="w-full flex items-center justify-center gap-3 px-8 py-3.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-heading text-xl sm:text-2xl font-bold uppercase tracking-wider rounded-md shadow-[0_0_25px_rgba(220,38,38,0.5)] transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              className="w-full flex items-center justify-center gap-3 px-8 py-3 bg-[#1e232d] hover:bg-[#282f3d] active:bg-[#161a22] text-slate-100 border border-slate-700 hover:border-slate-500 font-heading text-lg sm:text-xl font-bold uppercase tracking-wider rounded-md transition-all transform hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
             >
-              <Play className="w-6 h-6 fill-current text-white" />
+              <Play className="w-5 h-5 fill-current text-red-500" />
               <span>STORY MODE: CHAPTER 1</span>
             </button>
 

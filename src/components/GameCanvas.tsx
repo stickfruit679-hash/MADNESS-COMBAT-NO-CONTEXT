@@ -21,6 +21,8 @@ import { drawGrunt, drawRagdollPiece, spriteManager } from '../utils/sprites';
 import { drawChapterEnvironment } from '../utils/environments';
 import { soundManager } from '../audio/soundManager';
 import { inputController } from '../utils/inputController';
+import { GruntAvatarId, MultiplayerServer, RemotePlayerState } from '../types/multiplayer';
+import { multiplayerService } from '../services/multiplayerService';
 
 interface GameCanvasProps {
   gameMode: GameMode;
@@ -40,6 +42,9 @@ interface GameCanvasProps {
   goreSetting: GoreSetting;
   bloodAmount: BloodAmount;
   onChapterComplete: () => void;
+  playerAvatar?: GruntAvatarId;
+  playerName?: string;
+  multiplayerServer?: MultiplayerServer | null;
 }
 
 const PLAYER_MAX_HEALTH = 250; // Protagonist has 250 HP so they can survive high-action combat
@@ -62,6 +67,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   goreSetting,
   bloodAmount,
   onChapterComplete,
+  playerAvatar = 'ninja_grunt',
+  playerName = 'Hank Wimbleton',
+  multiplayerServer = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -92,7 +100,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     recoilOffset: 0,
     muzzleFlashTimer: 0,
     bloodStains: [],
+    avatarId: playerAvatar,
+    playerName: playerName || 'Hank Wimbleton',
   });
+
+  const remotePlayersRef = useRef<Map<string, Character>>(new Map());
+  const syncTimerRef = useRef<number>(0);
 
   const enemiesRef = useRef<Character[]>([]);
   const bulletsRef = useRef<Bullet[]>([]);
@@ -180,6 +193,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       recoilOffset: 0,
       muzzleFlashTimer: 0,
       bloodStains: [],
+      avatarId: playerAvatar,
+      playerName: playerName || 'Hank Wimbleton',
     };
 
     onPlayerHealthUpdate(PLAYER_MAX_HEALTH, PLAYER_MAX_HEALTH);
@@ -501,6 +516,123 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     enemiesRef.current.splice(enemyIndex, 1);
   }, [currentChapterId, gameMode, onChapterComplete, onUpdateStats, spawnDismemberment]);
 
+  // Real-time Multiplayer Subscriptions (Only active when in a multiplayer match)
+  useEffect(() => {
+    if (!multiplayerServer) {
+      remotePlayersRef.current.clear();
+      return;
+    }
+
+    const unregUpdate = multiplayerService.onRemotePlayerUpdate((state: RemotePlayerState) => {
+      // Don't update local player from remote
+      if (state.id === multiplayerService.getProfile().id) return;
+
+      const existing = remotePlayersRef.current.get(state.id);
+      if (existing) {
+        existing.x = state.x;
+        existing.y = state.y;
+        existing.vx = state.vx;
+        existing.vy = state.vy;
+        existing.angle = state.angle;
+        existing.isMoving = state.isMoving;
+        existing.health = state.health;
+        existing.maxHealth = state.maxHealth;
+        existing.isDead = state.isDead;
+        existing.isAttacking = state.isAttacking;
+        existing.hurtTimer = state.hurtTimer;
+        existing.avatarId = state.avatar;
+        existing.playerName = state.name;
+        if (existing.weapon.type !== state.weaponType) {
+          existing.weapon = createWeaponInstance(state.weaponType);
+        }
+      } else {
+        const newRemoteChar: Character = {
+          id: state.id,
+          x: state.x,
+          y: state.y,
+          vx: state.vx,
+          vy: state.vy,
+          radius: 20,
+          angle: state.angle,
+          facingDirection: Math.cos(state.angle) >= 0 ? 1 : -1,
+          health: state.health,
+          maxHealth: state.maxHealth,
+          isPlayer: false,
+          walkTimer: 0,
+          isMoving: state.isMoving,
+          attackTimer: 0,
+          isAttacking: state.isAttacking,
+          attackProgress: 0,
+          attackHand: 'right',
+          hurtTimer: state.hurtTimer,
+          isDodging: false,
+          dodgeTimer: 0,
+          isDead: state.isDead,
+          weapon: createWeaponInstance(state.weaponType),
+          recoilOffset: 0,
+          muzzleFlashTimer: 0,
+          bloodStains: [],
+          avatarId: state.avatar,
+          playerName: state.name,
+        };
+        remotePlayersRef.current.set(state.id, newRemoteChar);
+        addFloatingText(`${state.name} ENTERED COMBAT!`, state.x, state.y - 45, '#38bdf8', 18);
+      }
+    });
+
+    const unregShoot = multiplayerService.onRemotePlayerShoot((shoot) => {
+      if (shoot.playerId === multiplayerService.getProfile().id) return;
+      bulletsRef.current.push({
+        id: Math.random().toString(),
+        x: shoot.x + Math.cos(shoot.angle) * 28,
+        y: shoot.y + Math.sin(shoot.angle) * 28,
+        vx: Math.cos(shoot.angle) * 16,
+        vy: Math.sin(shoot.angle) * 16,
+        damage: 22,
+        fromPlayer: false,
+        distanceTraveled: 0,
+        maxDistance: 600,
+        color: '#f87171',
+        weaponType: shoot.weaponType as WeaponType,
+      });
+
+      if (shoot.weaponType === 'pistol') soundManager.playPistol();
+      else if (shoot.weaponType === 'shotgun') soundManager.playShotgun();
+      else if (shoot.weaponType === 'uzi') soundManager.playUzi();
+      else soundManager.playPunch();
+    });
+
+    const unregHit = multiplayerService.onRemotePlayerHit((hit) => {
+      if (hit.targetPlayerId === multiplayerService.getProfile().id) {
+        const player = playerRef.current;
+        if (!player.isDead) {
+          player.health -= hit.damage;
+          player.hurtTimer = 0.35;
+          screenShakeRef.current = 6;
+          soundManager.playBloodSplat();
+          addBloodToCharacter(player, true);
+          addBloodSplatter(player.x, player.y, 8, 1.2);
+          addFloatingText(`-${Math.round(hit.damage)}`, player.x, player.y - 30, '#ef4444', 20);
+          onPlayerHealthUpdate(player.health, player.maxHealth);
+
+          if (player.health <= 0) {
+            player.health = 0;
+            player.isDead = true;
+            spawnDismemberment(player);
+            onPlayerDeath();
+          }
+        }
+      }
+    });
+
+    return () => {
+      unregUpdate();
+      unregShoot();
+      unregHit();
+      remotePlayersRef.current.clear();
+    };
+  }, [multiplayerServer, onPlayerDeath, onPlayerHealthUpdate, spawnDismemberment, addBloodSplatter, addBloodToCharacter]);
+
   // Spawn Next Story Grunt (Sequential for Chapter 1: 30 grunts one by one!)
   const spawnNextStoryEnemy = useCallback((canvasWidth: number, canvasHeight: number) => {
     const chapter = STORY_CHAPTERS.find((c) => c.id === currentChapterId) || STORY_CHAPTERS[0];
@@ -666,11 +798,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       shotsFired: prev.shotsFired + weapon.bulletsPerShot,
     }));
 
+    if (multiplayerServer) {
+      multiplayerService.sendPlayerShoot({
+        playerId: multiplayerService.getProfile().id,
+        x: player.x,
+        y: player.y,
+        angle: player.angle,
+        weaponType: weapon.type,
+      });
+    }
+
     if (weapon.type === 'fists') {
       soundManager.playPunch();
       screenShakeRef.current = Math.max(screenShakeRef.current, 3);
 
       const punchRange = 65;
+      if (multiplayerServer) {
+        remotePlayersRef.current.forEach((remoteChar) => {
+          if (!remoteChar.isDead) {
+            const dx = remoteChar.x - player.x;
+            const dy = remoteChar.y - player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < punchRange) {
+              remoteChar.health -= weapon.damage;
+              remoteChar.hurtTimer = 0.2;
+              addBloodToCharacter(remoteChar, false);
+              addBloodSplatter(remoteChar.x, remoteChar.y, 6, 1.2);
+              addFloatingText(`-${weapon.damage}`, remoteChar.x, remoteChar.y - 25, '#fbbf24', 18);
+              multiplayerService.sendPlayerHit({
+                targetPlayerId: remoteChar.id,
+                damage: weapon.damage,
+                attackerId: multiplayerService.getProfile().id,
+              });
+            }
+          }
+        });
+      }
       for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
         const enemy = enemiesRef.current[i];
         const dx = enemy.x - player.x;
@@ -707,6 +870,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       screenShakeRef.current = Math.max(screenShakeRef.current, 4);
 
       const slashRange = 75;
+      if (multiplayerServer) {
+        remotePlayersRef.current.forEach((remoteChar) => {
+          if (!remoteChar.isDead) {
+            const dx = remoteChar.x - player.x;
+            const dy = remoteChar.y - player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < slashRange) {
+              remoteChar.health -= weapon.damage;
+              remoteChar.hurtTimer = 0.2;
+              addBloodToCharacter(remoteChar, true);
+              addBloodSplatter(remoteChar.x, remoteChar.y, 10, 1.5);
+              addFloatingText(`CRIT -${weapon.damage}`, remoteChar.x, remoteChar.y - 30, '#ef4444', 20);
+              soundManager.playBloodSplat();
+              multiplayerService.sendPlayerHit({
+                targetPlayerId: remoteChar.id,
+                damage: weapon.damage,
+                attackerId: multiplayerService.getProfile().id,
+              });
+            }
+          }
+        });
+      }
       for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
         const enemy = enemiesRef.current[i];
         const dx = enemy.x - player.x;
@@ -1300,6 +1485,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
+          if (!hit && multiplayerServer) {
+            remotePlayersRef.current.forEach((remoteChar) => {
+              if (!hit && !remoteChar.isDead) {
+                const dx = b.x - remoteChar.x;
+                const dy = b.y - remoteChar.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < remoteChar.radius + 6) {
+                  hit = true;
+                  remoteChar.health -= b.damage;
+                  remoteChar.hurtTimer = 0.2;
+                  addBloodToCharacter(remoteChar, b.weaponType === 'shotgun');
+                  addBloodSplatter(remoteChar.x, remoteChar.y, 8, 1.4);
+                  soundManager.playBloodSplat();
+                  addFloatingText(`-${Math.round(b.damage)}`, remoteChar.x, remoteChar.y - 25, '#f87171', 16);
+                  multiplayerService.sendPlayerHit({
+                    targetPlayerId: remoteChar.id,
+                    damage: b.damage,
+                    attackerId: multiplayerService.getProfile().id,
+                  });
+                }
+              }
+            });
+          }
+
           if (hit) {
             bulletsRef.current.splice(i, 1);
           }
@@ -1450,6 +1659,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         screenShakeRef.current = Math.max(0, screenShakeRef.current - dt * 25);
       }
 
+      // Stream Local Player Real-Time State to Multiplayer Server (~30Hz)
+      if (multiplayerServer && !player.isDead) {
+        syncTimerRef.current += effectiveDt;
+        if (syncTimerRef.current >= 0.033) {
+          syncTimerRef.current = 0;
+          multiplayerService.sendPlayerState({
+            id: multiplayerService.getProfile().id,
+            name: playerName || 'Hank Wimbleton',
+            avatar: playerAvatar || 'ninja_grunt',
+            x: player.x,
+            y: player.y,
+            vx: player.vx,
+            vy: player.vy,
+            angle: player.angle,
+            isMoving: player.isMoving,
+            weaponType: player.weapon.type,
+            health: player.health,
+            maxHealth: player.maxHealth,
+            isDead: player.isDead,
+            isAttacking: player.isAttacking,
+            hurtTimer: player.hurtTimer,
+            isHost: multiplayerServer.hostId === multiplayerService.getProfile().id,
+            lastUpdated: Date.now(),
+          });
+        }
+      }
+
       // -------------------------------------------------------------
       // RENDERING PIPELINE
       // -------------------------------------------------------------
@@ -1545,16 +1781,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       }
 
-      // Draw Characters (Player and Enemies sorted by Y)
+      // Draw Characters (Player, Remote Players, and Enemies sorted by Y)
       const allCharacters: Character[] = [];
       if (!player.isDead) allCharacters.push(player);
+      if (multiplayerServer) {
+        remotePlayersRef.current.forEach((rp) => {
+          if (!rp.isDead) allCharacters.push(rp);
+        });
+      }
       enemiesRef.current.forEach((e) => {
         if (!e.isDead) allCharacters.push(e);
       });
       allCharacters.sort((a, b) => a.y - b.y);
 
       allCharacters.forEach((char) => {
-        drawGrunt(ctx, char, currentTime / 1000, goreSetting, gameMode === 'story' ? currentChapterId : 0);
+        drawGrunt(ctx, char, currentTime / 1000, goreSetting, gameMode === 'story' ? currentChapterId : 0, char.avatarId);
       });
 
       // Bullets

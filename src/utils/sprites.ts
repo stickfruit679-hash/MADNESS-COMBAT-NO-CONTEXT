@@ -4,6 +4,8 @@
  */
 
 import { Character, RagdollPiece, GoreSetting } from '../types/game';
+import { GruntAvatarId } from '../types/multiplayer';
+import { drawGruntAvatarFace } from './gruntAvatars';
 
 interface LoadedSprites {
   [key: string]: HTMLImageElement;
@@ -87,12 +89,15 @@ export function drawGrunt(
   char: Character, 
   time: number, 
   goreSetting: GoreSetting = 'default',
-  storyChapter: number = 0
+  storyChapter: number = 0,
+  customAvatarId?: GruntAvatarId
 ) {
   const images = spriteManager.images;
-  const isAgent = char.enemyType === 'agent';
+  const activeAvatar: GruntAvatarId | undefined = customAvatarId || char.avatarId;
+  const isAgent = char.enemyType === 'agent' || activeAvatar === 'agent_grunt';
   const isHurt = char.hurtTimer > 0;
-  const isPlayerHank = !!char.isPlayer;
+  const isPlayerHank = !!char.isPlayer || !!activeAvatar;
+  const isNinja = (isPlayerHank && storyChapter >= 4) || activeAvatar === 'ninja_grunt';
 
   ctx.save();
   ctx.translate(char.x, char.y);
@@ -142,8 +147,8 @@ export function drawGrunt(
   const rightFootX = 12 - (isWalking ? walkOffset * 10 : 0);
   const rightFootY = footYBase - (isWalking ? Math.max(0, walkCos) * 7 : 0);
 
-  // Final Level: Black Ninja Boots for Hank
-  if (isPlayerHank && storyChapter >= 4) {
+  // Final Level or Ninja Avatar: Black Ninja Boots for Hank
+  if (isNinja) {
     ctx.save();
     ctx.fillStyle = '#09090b';
     ctx.strokeStyle = '#000000';
@@ -216,8 +221,8 @@ export function drawGrunt(
     ? (images.torsoRight || images.torsoLeft) 
     : (images.torsoLeft || images.torsoRight);
 
-  if (isPlayerHank && storyChapter >= 4) {
-    // FINAL LEVEL: Tactical Black Ninja Outfit
+  if (isNinja) {
+    // FINAL LEVEL OR NINJA AVATAR: Tactical Black Ninja Outfit
     ctx.fillStyle = '#121316';
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 3;
@@ -385,60 +390,70 @@ export function drawGrunt(
   ctx.translate(0, headY);
   ctx.rotate(hurtHeadTilt);
 
-  // Check if character has an Extreme Gore Head (from user-provided image)
-  let headImg: HTMLImageElement | undefined = undefined;
-  if (goreSetting === 'extreme_gore' && char.goreHeadSprite && images[char.goreHeadSprite]) {
-    headImg = images[char.goreHeadSprite];
-  } else {
-    // Normal complete uncut head angle
-    if (cos > 0.7) {
-      headImg = images.headRight;
-    } else if (cos > 0.22) {
-      headImg = images.headDiagRight || images.headRight;
-    } else if (cos < -0.7) {
-      headImg = images.headLeft;
-    } else if (cos < -0.22) {
-      headImg = images.headDiagLeft || images.headLeft;
-    } else {
-      headImg = images.headFront;
+  // Check if character has an active Grumt avatar (Multiplayer / Chosen Grumt)
+  if (activeAvatar) {
+    ctx.save();
+    if (!isFacingRight) {
+      ctx.scale(-1, 1);
     }
-  }
-
-  if (headImg) {
-    if (char.goreHeadSprite) {
-      // Source gore head sprites from user photo face left
-      ctx.save();
-      if (isFacingRight) {
-        ctx.scale(-1, 1);
+    drawGruntAvatarFace(ctx, activeAvatar, 0, 0, 48);
+    ctx.restore();
+  } else {
+    // Check if character has an Extreme Gore Head (from user-provided image)
+    let headImg: HTMLImageElement | undefined = undefined;
+    if (goreSetting === 'extreme_gore' && char.goreHeadSprite && images[char.goreHeadSprite]) {
+      headImg = images[char.goreHeadSprite];
+    } else {
+      // Normal complete uncut head angle
+      if (cos > 0.7) {
+        headImg = images.headRight;
+      } else if (cos > 0.22) {
+        headImg = images.headDiagRight || images.headRight;
+      } else if (cos < -0.7) {
+        headImg = images.headLeft;
+      } else if (cos < -0.22) {
+        headImg = images.headDiagLeft || images.headLeft;
+      } else {
+        headImg = images.headFront;
       }
-      const goreW = 48;
-      const goreH = 52;
-      ctx.drawImage(headImg, -goreW / 2, -goreH / 2, goreW, goreH);
-      ctx.restore();
-    } else {
-      ctx.drawImage(headImg, -headWidth / 2, -headHeight / 2, headWidth, headHeight);
     }
-  } else {
-    ctx.fillStyle = '#9ca3af';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 22, 26, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(-12, 0);
-    ctx.lineTo(12, 0);
-    ctx.moveTo(0, -18);
-    ctx.lineTo(0, 18);
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
+    if (headImg) {
+      if (char.goreHeadSprite) {
+        // Source gore head sprites from user photo face left
+        ctx.save();
+        if (isFacingRight) {
+          ctx.scale(-1, 1);
+        }
+        const goreW = 48;
+        const goreH = 52;
+        ctx.drawImage(headImg, -goreW / 2, -goreH / 2, goreW, goreH);
+        ctx.restore();
+      } else {
+        ctx.drawImage(headImg, -headWidth / 2, -headHeight / 2, headWidth, headHeight);
+      }
+    } else {
+      ctx.fillStyle = '#9ca3af';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 22, 26, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-12, 0);
+      ctx.lineTo(12, 0);
+      ctx.moveTo(0, -18);
+      ctx.lineTo(0, 18);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
   }
 
-  // ACCUMULATE STORY BANDAGES ON HEAD
-  if (isPlayerHank && storyChapter === 2) {
+  // ACCUMULATE STORY BANDAGES ON HEAD (Story Mode only when no custom avatar)
+  if (!activeAvatar && isPlayerHank && storyChapter === 2) {
     // Chapter 2: Bandage strip on head/temple
     ctx.save();
     ctx.fillStyle = '#f4f4f5';
@@ -454,7 +469,7 @@ export function drawGrunt(
     ctx.arc(isFacingRight ? 3 : -3, 0, 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-  } else if (isPlayerHank && storyChapter === 3) {
+  } else if (!activeAvatar && isPlayerHank && storyChapter === 3) {
     // Chapter 3: Heavy gauze wrapping around chin/jaw, and across forehead
     ctx.save();
     // 1. Chin & Jaw wrap
@@ -492,7 +507,7 @@ export function drawGrunt(
     ctx.arc(0, 17, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-  } else if (isPlayerHank && storyChapter >= 4) {
+  } else if (!activeAvatar && isPlayerHank && storyChapter >= 4) {
     // FINAL LEVEL: ICONIC BLACK BANDANA & RED GOGGLES & BLOOD STAINS
     ctx.save();
 
@@ -861,6 +876,30 @@ export function drawGrunt(
     if (char.muzzleFlashTimer > 0) {
       drawMuzzleFlash(ctx, 34, -3, 15);
     }
+    ctx.restore();
+  }
+
+  // Overhead Player Codename & Health Bar (Multiplayer / Named Grunts)
+  if (char.playerName) {
+    ctx.save();
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = char.isPlayer ? '#38bdf8' : '#f87171';
+    ctx.fillText(char.playerName, 0, -48);
+
+    // Mini Health bar
+    const barW = 38;
+    const barH = 4;
+    const hpPct = Math.max(0, Math.min(1, char.health / char.maxHealth));
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(-barW / 2, -43, barW, barH);
+    ctx.fillStyle = hpPct > 0.5 ? '#22c55e' : hpPct > 0.2 ? '#eab308' : '#ef4444';
+    ctx.fillRect(-barW / 2, -43, barW * hpPct, barH);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-barW / 2, -43, barW, barH);
     ctx.restore();
   }
 

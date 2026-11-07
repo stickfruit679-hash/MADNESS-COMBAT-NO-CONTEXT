@@ -2,6 +2,8 @@
  * Types for Madness Combat: No Context
  */
 
+import { GruntAvatarId } from './multiplayer';
+
 export type WeaponType = 'fists' | 'knife' | 'pistol' | 'shotgun' | 'uzi';
 
 export type GoreSetting = 'no_blood' | 'default' | 'extreme_gore';
@@ -48,6 +50,8 @@ export interface Character {
   maxHealth: number;
   isPlayer: boolean;
   enemyType?: EnemyType;
+  avatarId?: GruntAvatarId;
+  playerName?: string;
   
   // Animation state
   walkTimer: number;
