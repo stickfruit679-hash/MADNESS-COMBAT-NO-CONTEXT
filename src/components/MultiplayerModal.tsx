@@ -71,6 +71,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
   
   const [activeTab, setActiveTab] = useState<TabType>('SERVERS');
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [directCode, setDirectCode] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
@@ -84,7 +85,17 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
   const [nameInput, setNameInput] = useState(profile.name);
   const [selectedAvatar, setSelectedAvatar] = useState<GruntAvatarId>(profile.avatar);
 
-  // Subscribe to real-time events across windows / tabs
+  // Helper to format cross-instance invite link (converting ais-dev- to ais-pre- for shared access)
+  const getShareInviteUrl = (code?: string) => {
+    const c = code || activeServer?.code;
+    let origin = window.location.origin;
+    if (origin.includes('ais-dev-')) {
+      origin = origin.replace('ais-dev-', 'ais-pre-');
+    }
+    return `${origin}/#join=${c || ''}`;
+  };
+
+  // Subscribe to real-time events across windows / tabs / external clients
   useEffect(() => {
     const unsubscribe = multiplayerService.subscribe((event: MultiplayerEvent) => {
       if (event.type === 'SERVER_LIST_UPDATED') {
@@ -114,6 +125,21 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
         }
       }
     });
+
+    // Auto-join if URL hash has #join=...
+    const hash = window.location.hash;
+    if (hash.includes('join=')) {
+      const code = hash.split('join=')[1]?.split('&')[0]?.trim();
+      if (code) {
+        setDirectCode(code);
+        setTimeout(() => {
+          handleJoinServer(code);
+        }, 300);
+      }
+    }
+
+    // Refresh servers immediately
+    multiplayerService.refreshServers();
 
     return () => unsubscribe();
   }, [profile.id, onLaunchMatch]);
@@ -193,6 +219,16 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
     setCopiedCode(true);
     soundManager.playCasingPing();
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleCopyInviteLink = () => {
+    if (!activeServer) return;
+    const url = getShareInviteUrl(activeServer.code);
+    navigator.clipboard.writeText(url);
+    setCopiedInviteLink(true);
+    soundManager.playCasingPing();
+    showToast('1-Click Invite Link copied! Anyone opening this link joins immediately.', 'success');
+    setTimeout(() => setCopiedInviteLink(false), 2500);
   };
 
   const isLocalHost = activeServer && activeServer.hostId === profile.id;
@@ -299,20 +335,53 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   </div>
                 </div>
 
-                {/* Server Code Sharing Badge */}
-                <div className="flex items-center gap-2 bg-[#0d0f14] border border-slate-700 px-3 py-2 rounded">
-                  <span className="text-xs font-mono-tech text-slate-400">SERVER CODE:</span>
-                  <span className="font-mono-tech text-base font-black text-white tracking-widest">
-                    {activeServer.code}
-                  </span>
+                {/* Server Code & Direct Link Sharing Badges */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2 bg-[#0d0f14] border border-slate-700 px-3 py-2 rounded">
+                    <span className="text-xs font-mono-tech text-slate-400">CODE:</span>
+                    <span className="font-mono-tech text-base font-black text-white tracking-widest">
+                      {activeServer.code}
+                    </span>
+                    <button
+                      onClick={handleCopyCode}
+                      title="Copy server code"
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
+                    >
+                      {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+
                   <button
-                    onClick={handleCopyCode}
-                    title="Copy server code to share"
-                    className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
+                    onClick={handleCopyInviteLink}
+                    title="Copy 1-click invite link to share with friends"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-500 text-white font-mono-tech text-xs font-bold uppercase rounded shadow-[0_0_15px_rgba(220,38,38,0.5)] transition cursor-pointer"
                   >
-                    {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    {copiedInviteLink ? <Check className="w-4 h-4 text-emerald-300" /> : <Zap className="w-4 h-4 text-amber-300 animate-pulse" />}
+                    <span>{copiedInviteLink ? 'LINK COPIED!' : 'COPY INVITE LINK'}</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Cross-Device / Friend Direct Invite Banner */}
+              <div className="mt-3 p-3 bg-red-950/40 border border-red-800/80 rounded-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <Globe className="w-5 h-5 text-red-400 animate-pulse shrink-0" />
+                  <div className="text-left font-mono-tech">
+                    <span className="block text-xs font-bold text-white uppercase tracking-wider">
+                      PLAY WITH REAL FRIENDS ACROSS DIFFERENT COMPUTERS / PHONES
+                    </span>
+                    <span className="block text-[11px] text-slate-300">
+                      Send your friend this link—they don't need an account or install, it connects straight to your room!
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCopyInviteLink}
+                  className="w-full sm:w-auto shrink-0 px-4 py-2 bg-[#1a1e28] hover:bg-[#262c3b] border border-red-500/80 text-white font-mono-tech text-xs font-bold uppercase rounded flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{copiedInviteLink ? 'COPIED!' : 'COPY 1-CLICK LINK'}</span>
+                </button>
               </div>
 
               {/* Connected Players Roster */}
@@ -557,16 +626,24 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between text-xs font-mono-tech text-slate-400">
-                  <span>ACTIVE NEVADA SERVERS ({servers.length})</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-300">ACTIVE NEVADA SERVERS ({servers.length})</span>
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/70 text-emerald-400 text-[10px] rounded font-bold">
+                      <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                      <span>GLOBAL CLOUD MESH LIVE</span>
+                    </span>
+                  </div>
                   <button
                     onClick={() => {
+                      multiplayerService.refreshServers();
                       setServers(multiplayerService.getServers());
                       soundManager.playCasingPing();
+                      showToast('Broadcasting discovery ping to Nevada network...', 'success');
                     }}
-                    className="flex items-center gap-1 text-slate-400 hover:text-white cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-[#1a1d28] hover:bg-[#252a38] border border-slate-700 rounded text-slate-300 hover:text-white transition cursor-pointer"
                   >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>REFRESH</span>
+                    <RefreshCw className="w-3 h-3 text-red-400" />
+                    <span>REFRESH LIST</span>
                   </button>
                 </div>
 
@@ -593,14 +670,15 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(window.location.href);
-                          showToast('Game link copied! Open in another tab or send to friends.', 'success');
+                          const url = getShareInviteUrl();
+                          navigator.clipboard.writeText(url);
+                          showToast('Public game link copied! Send to friends to play together.', 'success');
                           soundManager.playCasingPing();
                         }}
                         className="px-4 py-2.5 bg-[#1a1d26] hover:bg-[#252a37] border border-slate-700 text-slate-300 hover:text-white font-mono-tech text-xs uppercase tracking-wider rounded transition cursor-pointer flex items-center gap-1.5"
                       >
                         <Copy className="w-3.5 h-3.5 text-amber-400" />
-                        <span>COPY LINK FOR REAL PLAYERS</span>
+                        <span>COPY GAME LINK FOR FRIENDS</span>
                       </button>
                     </div>
                   </div>

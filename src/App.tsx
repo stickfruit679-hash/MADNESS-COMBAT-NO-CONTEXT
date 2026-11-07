@@ -118,10 +118,19 @@ export default function App() {
     },
   });
 
-  // Auto detect mobile/touch devices or small screen
+  // Auto detect mobile/touch devices or small screen and detect invite hash links
   useEffect(() => {
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 900;
     setShowMobileControls(isTouch);
+
+    const checkHash = () => {
+      if (window.location.hash.includes('join=')) {
+        setShowMultiplayerModal(true);
+      }
+    };
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
   }, []);
 
   // Update and persist gore setting
