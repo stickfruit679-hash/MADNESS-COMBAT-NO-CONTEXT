@@ -49,6 +49,7 @@ export interface Character {
   health: number;
   maxHealth: number;
   isPlayer: boolean;
+  isRemotePlayer?: boolean;
   enemyType?: EnemyType;
   avatarId?: GruntAvatarId;
   playerName?: string;

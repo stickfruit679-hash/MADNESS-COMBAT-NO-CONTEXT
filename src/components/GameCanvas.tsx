@@ -100,8 +100,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     recoilOffset: 0,
     muzzleFlashTimer: 0,
     bloodStains: [],
-    avatarId: playerAvatar,
-    playerName: playerName || 'Hank Wimbleton',
+    avatarId: multiplayerServer ? playerAvatar : undefined,
+    playerName: multiplayerServer ? (playerName || 'Hank Wimbleton') : undefined,
   });
 
   const remotePlayersRef = useRef<Map<string, Character>>(new Map());
@@ -193,8 +193,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       recoilOffset: 0,
       muzzleFlashTimer: 0,
       bloodStains: [],
-      avatarId: playerAvatar,
-      playerName: playerName || 'Hank Wimbleton',
+      avatarId: multiplayerServer ? playerAvatar : undefined,
+      playerName: multiplayerServer ? (playerName || 'Hank Wimbleton') : undefined,
     };
 
     onPlayerHealthUpdate(PLAYER_MAX_HEALTH, PLAYER_MAX_HEALTH);
@@ -558,6 +558,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           health: state.health,
           maxHealth: state.maxHealth,
           isPlayer: false,
+          isRemotePlayer: true,
           walkTimer: 0,
           isMoving: state.isMoving,
           attackTimer: 0,
@@ -1794,8 +1795,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
       allCharacters.sort((a, b) => a.y - b.y);
 
+      const isMultiplayerGame = !!multiplayerServer;
       allCharacters.forEach((char) => {
-        drawGrunt(ctx, char, currentTime / 1000, goreSetting, gameMode === 'story' ? currentChapterId : 0, char.avatarId);
+        drawGrunt(
+          ctx, 
+          char, 
+          currentTime / 1000, 
+          goreSetting, 
+          gameMode === 'story' ? currentChapterId : 0, 
+          isMultiplayerGame ? char.avatarId : undefined,
+          isMultiplayerGame
+        );
       });
 
       // Bullets

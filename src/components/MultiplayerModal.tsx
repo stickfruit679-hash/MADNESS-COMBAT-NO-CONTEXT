@@ -272,7 +272,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
               <GruntAvatarIcon avatarId={profile.avatar} size={28} />
               <div className="text-left font-mono-tech leading-tight">
                 <span className="block text-xs font-bold text-white">{profile.name}</span>
-                <span className="block text-[10px] text-red-400">EDIT PROFILE</span>
+                <span className="block text-[10px] text-red-400">MULTIPLAYER AVATAR</span>
               </div>
             </button>
 
@@ -461,11 +461,11 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   <div className="flex items-center gap-2">
                     <Flame className="w-4 h-4 text-red-500" />
                     <span className="font-heading text-xs font-bold text-slate-200 uppercase tracking-wider">
-                      CHOOSE YOUR PLAYABLE "GRUMT" AVATAR
+                      CHOOSE YOUR MULTIPLAYER "GRUMT" AVATAR
                     </span>
                   </div>
                   <span className="font-mono-tech text-[10px] text-red-400 uppercase font-bold">
-                    SELECTED: {GRUNT_AVATARS.find((g) => g.id === profile.avatar)?.name || 'GRUNT'}
+                    ACTIVE MULTIPLAYER SKIN: {GRUNT_AVATARS.find((g) => g.id === profile.avatar)?.name || 'GRUNT'}
                   </span>
                 </div>
 
@@ -479,7 +479,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                           soundManager.playPistol();
                           const updated = multiplayerService.updateProfile(profile.name, av.id);
                           setProfile(updated);
-                          showToast(`Playable Grumt changed to: ${av.name}`, 'success');
+                          showToast(`Multiplayer Grumt skin set to: ${av.name}`, 'success');
                         }}
                         title={`${av.name} (${av.tagline})`}
                         className={`flex flex-col items-center p-1.5 rounded border transition-all cursor-pointer ${
@@ -578,7 +578,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   }`}
                 >
                   <Shield className="w-4 h-4" />
-                  <span>GRUMT PROFILE</span>
+                  <span>MULTIPLAYER AVATAR</span>
                 </button>
               </div>
 
@@ -822,7 +822,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 <div className="bg-[#141722] p-4 rounded-md border border-slate-800">
                   <div className="flex items-center justify-between mb-2">
                     <label className="font-heading text-xs font-bold text-red-400 uppercase tracking-wider">
-                      SET YOUR OPERATIVE NAME
+                      SET YOUR MULTIPLAYER OPERATIVE NAME
                     </label>
                     <button
                       onClick={handleRandomizeName}
@@ -838,7 +838,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       maxLength={18}
-                      placeholder="Enter your name..."
+                      placeholder="Enter your multiplayer name..."
                       className="flex-1 bg-[#0f1118] border border-slate-700 px-3.5 py-2.5 rounded font-heading text-lg font-bold text-white focus:border-red-500 focus:outline-none"
                     />
                     <button
@@ -848,6 +848,9 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                       SAVE PROFILE
                     </button>
                   </div>
+                  <p className="font-mono-tech text-[10px] text-slate-400 mt-2">
+                    * This name and avatar will ONLY represent you in Multiplayer battles. Story Mode and Normal Mode retain classic protagonist progression with zero nametags.
+                  </p>
                 </div>
 
                 {/* Profile Picture: Choose from Various "Grumts" */}
@@ -855,7 +858,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-heading text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                       <Flame className="w-4 h-4 text-red-500" />
-                      <span>SELECT YOUR "GRUMT" PROFILE PICTURE</span>
+                      <span>SELECT YOUR MULTIPLAYER "GRUMT" AVATAR</span>
                     </h3>
                     <span className="font-mono-tech text-xs text-slate-400">
                       {GRUNT_AVATARS.length} AUTHENTIC MADNESS COMBAT SKINS

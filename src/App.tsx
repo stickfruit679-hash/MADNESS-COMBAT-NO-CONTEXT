@@ -421,8 +421,8 @@ export default function App() {
             goreSetting={goreSetting}
             bloodAmount={bloodAmount}
             onChapterComplete={handleChapterComplete}
-            playerAvatar={playerAvatar}
-            playerName={playerName}
+            playerAvatar={multiplayerServer ? playerAvatar : undefined}
+            playerName={multiplayerServer ? playerName : undefined}
             multiplayerServer={multiplayerServer}
           />
 

@@ -90,14 +90,16 @@ export function drawGrunt(
   time: number, 
   goreSetting: GoreSetting = 'default',
   storyChapter: number = 0,
-  customAvatarId?: GruntAvatarId
+  customAvatarId?: GruntAvatarId,
+  isMultiplayer: boolean = false
 ) {
   const images = spriteManager.images;
-  const activeAvatar: GruntAvatarId | undefined = customAvatarId || char.avatarId;
+  // Avatar strictly only applies in multiplayer mode; never changes in story mode or normal mode
+  const activeAvatar: GruntAvatarId | undefined = isMultiplayer ? (customAvatarId || char.avatarId) : undefined;
   const isAgent = char.enemyType === 'agent' || activeAvatar === 'agent_grunt';
   const isHurt = char.hurtTimer > 0;
-  const isPlayerHank = !!char.isPlayer || !!activeAvatar;
-  const isNinja = (isPlayerHank && storyChapter >= 4) || activeAvatar === 'ninja_grunt';
+  const isPlayerHank = !!char.isPlayer || (isMultiplayer && (char.isPlayer || !!char.isRemotePlayer));
+  const isNinja = (isPlayerHank && storyChapter >= 4) || (isMultiplayer && activeAvatar === 'ninja_grunt');
 
   ctx.save();
   ctx.translate(char.x, char.y);
@@ -879,8 +881,8 @@ export function drawGrunt(
     ctx.restore();
   }
 
-  // Overhead Player Codename & Health Bar (Multiplayer / Named Grunts)
-  if (char.playerName) {
+  // Overhead Player Codename & Health Bar (ONLY in Multiplayer Mode)
+  if (isMultiplayer && char.playerName) {
     ctx.save();
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'center';
